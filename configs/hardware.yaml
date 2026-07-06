@@ -1,0 +1,23 @@
+# 设备硬件接口配置
+# 描述当前网关硬件具备的物理通道。
+#   key   = 设备外观丝印标签（面板上印刷的端口名，供用户选择）
+#   value = 对应的 Linux 设备文件节点（实际下发使用的真实节点）
+# 链路配置时按通道类型选择 key，导出的链路 JSON 会自动填充为对应 value。
+
+Serial:
+  COM1: /dev/ttyS1
+  COM2: /dev/ttyS2
+  COM3: /dev/ttyS3
+  COM4: /dev/ttyS4
+  COM5: /dev/ttyS6
+  COM6: /dev/ttyS7
+
+Ethernet:
+  ETH1: eth0
+  ETH2: eth2
+  ETH3: eth3
+  ETH4: eth4
+
+CAN:
+  CAN1: can0
+  CAN2: can1

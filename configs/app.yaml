@@ -1,0 +1,12 @@
+# 应用配置
+# 目前仅包含日志相关参数；后续可在此追加其他模块配置。
+log:
+  level: info              # 日志级别：debug | info | warn | error
+  console: true            # 终端窗口输出
+  file: logs/gateway.log   # 文件输出路径（留空则不落文件）
+  maxSizeMB: 20            # 单文件大小上限（MB），超过即触发大小轮转
+  maxBackups: 30           # 保留的历史文件份数
+  maxAgeDays: 30           # 历史文件保留天数
+  compress: true           # 轮转后的历史文件是否 gzip 压缩
+  dailyRotate: true        # 是否每日 00:00 轮转
+  bufferSize: 500          # 前端出口环形缓冲保留的最近日志条数

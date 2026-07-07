@@ -6,14 +6,13 @@ import (
 	"gorm.io/datatypes"
 )
 
-// DeviceModel 设备模型：档案 + 属性 + 事件整体以 JSON 存储。
+// DeviceModel 设备模型：档案 + 属性整体以 JSON 存储。
 type DeviceModel struct {
 	ID           string         `gorm:"primaryKey" json:"id"` // UUID profileId
 	ProfileIndex int            `json:"profileIndex"`         // 档案索引，从 0 自增
 	Name         string         `json:"name"`
 	Profile      datatypes.JSON `json:"profile"`    // 档案/设备/协议信息
 	Properties   datatypes.JSON `json:"properties"` // 属性数组
-	Events       datatypes.JSON `json:"events"`     // 事件数组
 	CreatedAt    time.Time      `json:"-"`
 	UpdatedAt    time.Time      `json:"-"`
 }

@@ -10,7 +10,6 @@ function doLogin() {
 }
 function init() {
   propModal = new bootstrap.Modal(document.getElementById('propModal'));
-  eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
   Promise.all([loadModels(), loadHardware()]).then(() => loadChannels()).then(() => {
     switchSection('device');
     showLanding();

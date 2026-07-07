@@ -10,12 +10,12 @@ function apiGet(p) { return apiReq(p); }
 function apiPost(p, body) { return apiReq(p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }); }
 function apiDelete(p) { return apiReq(p, { method:'DELETE' }); }
 function modelToPayload(m) {
-  return { id: m.profile.profileId, profileIndex: toNum(m.profile.profileIndex, 0), name: m.profile.name || '', profile: m.profile, properties: m.properties, events: m.events };
+  return { id: m.profile.profileId, profileIndex: toNum(m.profile.profileIndex, 0), name: m.profile.name || '', profile: m.profile, properties: m.properties };
 }
 async function loadModels() {
   try {
     const rows = await apiGet('/models');
-    state.models = (rows || []).map(r => ({ id: (r.profile && r.profile.profileId) || r.id, profile: r.profile || {}, properties: r.properties || [], events: r.events || [] }));
+    state.models = (rows || []).map(r => ({ id: (r.profile && r.profile.profileId) || r.id, profile: r.profile || {}, properties: r.properties || [] }));
   } catch (e) { state.models = []; }
 }
 async function loadHardware() {

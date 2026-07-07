@@ -18,7 +18,7 @@ function renderStep() {
   document.getElementById('btn-prev').disabled = currentStep === 1;
   document.getElementById('btn-next').disabled = currentStep === TOTAL_STEPS;
   document.getElementById('step-counter').textContent = `第 ${currentStep} 步 / 共 ${TOTAL_STEPS} 步`;
-  if (currentStep === 4) renderPreview();
+  if (currentStep === TOTAL_STEPS) renderPreview();
 }
 
 /* ══════════════ Step 1 · Profile ══════════════ */
@@ -78,7 +78,6 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 function loadModelIntoBuffer(m) {
   state.profile = deepCopy(m.profile);
   state.properties = deepCopy(m.properties);
-  state.events = deepCopy(m.events);
 }
 function saveBufferIntoModel() {
   syncProfileFromForm();
@@ -86,7 +85,6 @@ function saveBufferIntoModel() {
   if (!m) return;
   m.profile = deepCopy(state.profile);
   m.properties = deepCopy(state.properties);
-  m.events = deepCopy(state.events);
 }
 function newModel() {
   const prof = emptyProfile();
@@ -96,10 +94,7 @@ function newModel() {
     id: genModelId(),
     profile: prof,
     properties: [
-      { id:'online', name:'在线状态', description:'0-离线 1-在线', dataType:'bool', unit:'', accessMode:'r', dataLength:'', base:'0', coefficient:'1', eventId:'online', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' }
-    ],
-    events: [
-      { index:0, id:'online', name:'设备通讯离线', description:'描述设备是否离线', level:'fault', type:'eq', triggerThreshold:'0', deadband:'', triggerDuration:'' }
+      { id:'online', name:'在线状态', description:'0-离线 1-在线', dataType:'bool', unit:'', accessMode:'r', dataLength:'', base:'0', coefficient:'1', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' }
     ]
   };
   state.models.push(m);
@@ -129,7 +124,6 @@ function enterWizard() {
   currentStep = 1;
   fillProfileForm();
   renderProps();
-  renderEvents();
   renderStep();
 }
 function showLanding() {
@@ -140,7 +134,7 @@ function backToList() {
   saveBufferIntoModel();
   const m = state.models.find(x => x.id === state.editingId);
   // discard a freshly-created model left completely empty
-  if (m && !m.profile.name && !m.properties.length && !m.events.length) {
+  if (m && !m.profile.name && !m.properties.length) {
     state.models = state.models.filter(x => x.id !== state.editingId);
   }
   state.editingId = null;
@@ -173,7 +167,6 @@ function renderModelList() {
           ${desc}
           <div class="model-card-stats">
             <div class="mc-stat"><div class="num">${m.properties.length}</div><div class="lbl">属性</div></div>
-            <div class="mc-stat"><div class="num">${m.events.length}</div><div class="lbl">事件</div></div>
           </div>
           <div class="model-card-actions">
             <button class="btn btn-primary btn-sm flex-grow-1" onclick="editModel('${m.id}')"><i class="bi bi-gear me-1"></i>配置</button>
@@ -191,13 +184,11 @@ function importProject(input) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      if ((state.properties.length || state.events.length) && !confirm('导入将覆盖当前配置，是否继续？')) { input.value = ''; return; }
+      if ((state.properties.length) && !confirm('导入将覆盖当前配置，是否继续？')) { input.value = ''; return; }
       state.profile = Object.assign(emptyProfile(), data.profile || {});
       state.properties = Array.isArray(data.properties) ? data.properties : [];
-      state.events = Array.isArray(data.events) ? data.events : [];
       fillProfileForm();
       renderProps();
-      renderEvents();
       alert('配置导入成功');
     } catch (err) {
       alert('导入失败：JSON 解析错误 - ' + err.message);
@@ -208,18 +199,12 @@ function importProject(input) {
 }
 
 /* ══════════════ Step 2 · Properties ══════════════ */
-function fillEventBindingOptions(selected) {
-  const sel = document.getElementById('pm-event');
-  sel.innerHTML = '<option value="">无</option>'
-    + state.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.id)} · ${escapeHtml(e.name)}</option>`).join('');
-  if (selected) sel.value = selected;
-}
 function openPropModal(idx = -1) {
   propEditIndex = idx;
   const form = document.getElementById('form-prop');
   form.classList.remove('was-validated');
   const p = idx >= 0 ? state.properties[idx]
-    : { id:'', name:'', description:'', dataType:'', unit:'', accessMode:'', dataLength:'', base:'0', coefficient:'1', eventId:'', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' };
+    : { id:'', name:'', description:'', dataType:'', unit:'', accessMode:'', dataLength:'', base:'0', coefficient:'1', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' };
   setVal('pm-index', idx >= 0 ? idx : state.properties.length);
   setVal('pm-id', p.id); setVal('pm-name', p.name); setVal('pm-desc', p.description);
   setVal('pm-dataType', p.dataType); setVal('pm-unit', p.unit); setVal('pm-access', p.accessMode);
@@ -227,7 +212,6 @@ function openPropModal(idx = -1) {
   setVal('pm-base', p.base); setVal('pm-coef', p.coefficient);
   setVal('pm-readfunc', p.readFunctionCode); setVal('pm-writefunc', p.writeFunctionCode);
   setVal('pm-regbase', p.registerBase); setVal('pm-regoffset', p.registerOffset); setVal('pm-byteorder', p.byteOrder);
-  fillEventBindingOptions(p.eventId);
   document.getElementById('pm-id').readOnly = isLocked(idx);
   document.getElementById('propModalTitle').textContent = idx >= 0 ? '编辑属性' : '添加属性';
   propModal.show();
@@ -243,7 +227,6 @@ function saveProp() {
   const p = {
     id, name: val('pm-name'), description: val('pm-desc'), dataType: val('pm-dataType'), unit: val('pm-unit'),
     accessMode: val('pm-access'), dataLength: val('pm-length'), base: val('pm-base') || '0', coefficient: val('pm-coef') || '1',
-    eventId: val('pm-event'),
     readFunctionCode: val('pm-readfunc'), writeFunctionCode: val('pm-writefunc'), registerBase: parseRegAddr(val('pm-regbase')), registerOffset: parseRegAddr(val('pm-regoffset')), byteOrder: val('pm-byteorder')
   };
   if (propEditIndex >= 0) state.properties[propEditIndex] = p; else state.properties.push(p);
@@ -263,7 +246,6 @@ function renderProps() {
   if (!state.properties.length) { tb.innerHTML = ''; empty.classList.remove('d-none'); wrap.classList.add('d-none'); return; }
   empty.classList.add('d-none'); wrap.classList.remove('d-none');
   tb.innerHTML = state.properties.map((p, i) => {
-    const ev = state.events.find(e => e.id === p.eventId);
     return `<tr>
       <td>${i}</td>
       <td><code>${escapeHtml(p.id)}</code></td>
@@ -272,7 +254,6 @@ function renderProps() {
       <td>${escapeHtml(p.unit || '—')}</td>
       <td><span class="badge badge-${escapeHtml(p.accessMode)}">${escapeHtml((p.accessMode || '').toUpperCase())}</span></td>
       <td>${escapeHtml(String(p.coefficient ?? '1'))}</td>
-      <td>${ev ? '<span class="badge bg-light text-dark border">' + escapeHtml(ev.id) + '</span>' : '<span class="text-muted">—</span>'}</td>
       <td class="text-nowrap">
         ${isLocked(i) ? '<span class="text-muted" title="默认属性不可删除"><i class="bi bi-lock"></i></span>' : `<button class="btn btn-sm btn-link p-0 me-2" onclick="openPropModal(${i})" title="编辑"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-sm btn-link p-0 text-danger" onclick="deleteProp(${i})" title="删除"><i class="bi bi-trash"></i></button>`}
@@ -281,14 +262,14 @@ function renderProps() {
   }).join('');
 }
 
-/* ── CSV ── */
+/* ─── CSV ─── */
 function csvCell(v) { const s = (v === null || v === undefined) ? '' : String(v); return '"' + s.replace(/"/g, '""') + '"'; }
 function exportPropsCsv() {
   if (!state.properties.length) { alert('暂无属性可导出'); return; }
   const lines = [CSV_HEADERS.map(csvCell).join(',')];
   state.properties.forEach(p => {
     lines.push([p.id, p.name, p.description, DT_LABEL[p.dataType] || p.dataType, p.dataLength, ACCESS_LABEL[p.accessMode] || p.accessMode,
-      p.base, p.coefficient, p.unit, p.eventId, p.readFunctionCode, p.writeFunctionCode, p.registerBase, p.registerOffset, p.byteOrder
+      p.base, p.coefficient, p.unit, p.readFunctionCode, p.writeFunctionCode, p.registerBase, p.registerOffset, p.byteOrder
     ].map(csvCell).join(','));
   });
   downloadBlob(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), sanitize(state.profile.name) + '-properties.csv');
@@ -342,7 +323,7 @@ function importPropsCsv(input) {
         imported.push({
           id, name: get('name'), description: get('description'), dataType: dt, unit: get('unit'), accessMode: acc,
           base: get('base') || '0', coefficient: get('coefficient') || '1',
-          eventId: get('eventId'), registerAddress: get('registerAddress'),
+          registerAddress: get('registerAddress'),
           dataSize: get('dataSize'), byteOrder: get('byteOrder'), bitOffset: get('bitOffset')
         });
       }
@@ -358,82 +339,10 @@ function importPropsCsv(input) {
   reader.readAsText(file);
 }
 
-/* ══════════════ Step 3 · Events ══════════════ */
-function nextEventIndex() { let n = 0; while (state.events.some(e => String(e.index) === String(n))) n++; return n; }
-function nextEventId() { let n = 0; while (state.events.some(e => String(e.id) === String(n))) n++; return String(n); }
+/* ══════════════ Shared helpers ══════════════ */
 function isLocked(idx) { return idx === 0; }
-function onTriggerTypeChange() {
-  const t = document.getElementById('em-type').value;
-  const show = (t === 'upper' || t === 'lower');
-  document.getElementById('em-deadband-wrap').style.display = show ? '' : 'none';
-  if (!show) document.getElementById('em-deadband').value = '';
-}
-function openEventModal(idx = -1) {
-  eventEditIndex = idx;
-  const form = document.getElementById('form-event');
-  form.classList.remove('was-validated');
-  const ev = idx >= 0 ? state.events[idx]
-    : { index: nextEventIndex(), id: nextEventId(), name:'', description:'', level:'', type:'', triggerThreshold:'', deadband:'', triggerDuration:'' };
-  setVal('em-index', ev.index); setVal('em-id', ev.id); setVal('em-name', ev.name); setVal('em-desc', ev.description);
-  setVal('em-level', ev.level); setVal('em-type', ev.type); setVal('em-threshold', ev.triggerThreshold);
-  setVal('em-deadband', ev.deadband); setVal('em-duration', ev.triggerDuration);
-  document.getElementById('em-id').readOnly = isLocked(idx);
-  onTriggerTypeChange();
-  document.getElementById('eventModalTitle').textContent = idx >= 0 ? '编辑事件' : '添加事件';
-  eventModal.show();
-}
-function saveEvent() {
-  const form = document.getElementById('form-event');
-  form.classList.add('was-validated');
-  if (!form.checkValidity()) return;
-  const id = val('em-id') || nextEventId();
-  const dup = state.events.findIndex(e => e.id === id);
-  if (dup >= 0 && dup !== eventEditIndex) { alert('事件ID 已存在：' + id); return; }
-  const idx = eventEditIndex >= 0 ? eventEditIndex : nextEventIndex();
-  const ev = {
-    index: idx, id, name: val('em-name'), description: val('em-desc'), level: val('em-level'), type: val('em-type'),
-    triggerThreshold: val('em-threshold'), deadband: val('em-deadband'), triggerDuration: val('em-duration')
-  };
-  if (eventEditIndex >= 0) state.events[eventEditIndex] = ev; else state.events.push(ev);
-  eventModal.hide();
-  renderEvents();
-}
-function deleteEvent(idx) {
-  if (isLocked(idx)) { alert('默认事件不可删除'); return; }
-  if (!confirm('确定删除该事件？关联此事件的属性绑定将被清除。')) return;
-  const removed = state.events[idx].id;
-  state.events.splice(idx, 1);
-  state.properties.forEach(p => { if (p.eventId === removed) p.eventId = ''; });
-  renderEvents();
-  renderProps();
-}
-function renderEvents() {
-  const tb = document.getElementById('events-tbody');
-  const empty = document.getElementById('events-empty');
-  const wrap = document.getElementById('events-table-wrap');
-  if (!state.events.length) { tb.innerHTML = ''; empty.classList.remove('d-none'); wrap.classList.add('d-none'); return; }
-  empty.classList.add('d-none'); wrap.classList.remove('d-none');
-  tb.innerHTML = state.events.map((e, i) => {
-    const showDb = (e.type === 'upper' || e.type === 'lower');
-    const actions = isLocked(i)
-      ? '<span class="text-muted" title="默认事件不可删除"><i class="bi bi-lock"></i></span>'
-      : `<button class="btn btn-sm btn-link p-0 me-2" onclick="openEventModal(${i})" title="编辑"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-sm btn-link p-0 text-danger" onclick="deleteEvent(${i})" title="删除"><i class="bi bi-trash"></i></button>`;
-    return `<tr>
-      <td>${i}</td>
-      <td><code>${escapeHtml(e.id)}</code></td>
-      <td>${escapeHtml(e.name)}</td>
-      <td><span class="badge badge-${escapeHtml(e.level)}">${escapeHtml(LEVEL_LABEL[e.level] || e.level)}</span></td>
-      <td>${escapeHtml(TYPE_LABEL[e.type] || e.type)}</td>
-      <td>${escapeHtml(e.triggerThreshold || '—')}</td>
-      <td>${escapeHtml(showDb ? (e.deadband || '—') : '—')}</td>
-      <td>${escapeHtml(e.triggerDuration || '—')}</td>
-      <td class="text-nowrap">${actions}</td>
-    </tr>`;
-  }).join('');
-}
 
-/* ══════════════ Step 4 · Preview & Export ══════════════ */
+/* ══════════════ Step 3 · Preview & Export ══════════════ */
 function buildCollectorConfig() {
   syncProfileFromForm();
   return {
@@ -451,17 +360,6 @@ function buildCollectorConfig() {
       protocolVersion: state.profile.protocolVersion || '',
       maxRegisterCount: toNum(state.profile.maxRegisterCount, 125)
     },
-    events: state.events.map(e => ({
-      index: toNum(e.index, 0),
-      id: e.id,
-      name: e.name,
-      description: e.description || '',
-      level: e.level,
-      type: e.type,
-      triggerThreshold: e.triggerThreshold,
-      deadband: (e.type === 'upper' || e.type === 'lower') ? toNumOrNull(e.deadband) : null,
-      triggerDuration: e.triggerDuration === '' ? null : toNum(e.triggerDuration, null)
-    })),
     properties: state.properties.map((p, i) => ({
       index: i,
       id: p.id,
@@ -473,7 +371,6 @@ function buildCollectorConfig() {
       dataLength: (p.dataLength === '' || p.dataLength === undefined) ? null : p.dataLength,
       base: toNum(p.base, 0),
       coefficient: toNum(p.coefficient, 1),
-      eventId: p.eventId || '',
       readFunctionCode: p.readFunctionCode || '',
       writeFunctionCode: p.writeFunctionCode || '',
       registerBase: parseRegAddr(p.registerBase) || '',
@@ -486,7 +383,6 @@ function renderPreview() {
   document.getElementById('pre-collector').textContent = JSON.stringify(buildCollectorConfig(), null, 2);
   document.getElementById('sum-name').textContent = state.profile.name || '—';
   document.getElementById('sum-props').textContent = state.properties.length;
-  document.getElementById('sum-events').textContent = state.events.length;
 }
 function saveDeviceModel() {
   if (!validateProfile()) { goStep(1); return; }
@@ -502,4 +398,3 @@ function exportDeviceModel() {
   if (!validateProfile()) { goStep(1); return; }
   downloadJson(buildCollectorConfig(), sanitize(state.profile.name) + '.json');
 }
-

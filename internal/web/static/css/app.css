@@ -75,10 +75,6 @@
     .badge-w { background: #d1fae5; color: #065f46; font-weight: 500; }
     .badge-rw { background: #dbeafe; color: #1e40af; font-weight: 500; }
 
-    /* ── Event Level Badges ── */
-    .badge-info { background: #dbeafe; color: #1e40af; }
-    .badge-warning { background: #fef3c7; color: #92400e; }
-    .badge-fault { background: #fee2e2; color: #991b1b; }
 
     /* ── Code Preview ── */
     .code-preview { background: #1e1e2e; color: #cdd6f4; border-radius: 10px; padding: 20px 22px; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 12.5px; line-height: 1.7; max-height: 440px; overflow: auto; white-space: pre; tab-size: 2; margin: 0; }

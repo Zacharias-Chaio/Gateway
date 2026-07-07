@@ -64,7 +64,7 @@
         <div id="device-landing">
           <div class="section-header">
             <h4><i class="bi bi-cpu me-2" style="color:var(--primary)"></i>设备模型</h4>
-            <div class="sub">管理南向采集设备模型，配置设备档案、属性与事件，导出采集配置 JSON</div>
+            <div class="sub">管理南向采集设备模型，配置设备档案与属性，导出采集配置 JSON</div>
           </div>
 
           <div class="landing-toolbar mt-3">
@@ -87,7 +87,7 @@
           <button class="btn btn-outline-secondary btn-sm" onclick="backToList()"><i class="bi bi-arrow-left me-1"></i>返回列表</button>
           <div class="flex-grow-1 min-w-0">
             <div class="wb-title" id="wizard-title">设备模型配置</div>
-            <div class="wb-sub">配置设备档案、设备属性、设备事件，最终导出采集配置 JSON</div>
+            <div class="wb-sub">配置设备档案与设备属性，最终导出采集配置 JSON</div>
           </div>
         </div>
 
@@ -95,8 +95,7 @@
         <div class="stepper" id="stepper">
           <div class="step-item" id="si-1" onclick="goStep(1)"><div class="step-circle">1</div><div class="step-label">档案配置</div></div>
           <div class="step-item" id="si-2" onclick="goStep(2)"><div class="step-circle">2</div><div class="step-label">属性配置</div></div>
-          <div class="step-item" id="si-3" onclick="goStep(3)"><div class="step-circle">3</div><div class="step-label">事件配置</div></div>
-          <div class="step-item" id="si-4" onclick="goStep(4)"><div class="step-circle">4</div><div class="step-label">预览导出</div></div>
+          <div class="step-item" id="si-3" onclick="goStep(3)"><div class="step-circle">3</div><div class="step-label">预览导出</div></div>
         </div>
 
         <div class="wizard-wrapper">
@@ -121,7 +120,7 @@
 
               <div class="info-banner">
                 <i class="bi bi-info-circle-fill me-2" style="color:var(--primary)"></i>
-                <span class="text-muted">档案定义设备的身份标识与南向通信方式。<span class="fw-semibold">导入配置</span> 可载入已保存的配置（档案+属性+事件）以便续编。</span>
+                <span class="text-muted">档案定义设备的身份标识与南向通信方式。<span class="fw-semibold">导入配置</span> 可载入已保存的配置（档案+属性）以便续编。</span>
               </div>
 
               <form id="form-profile" novalidate>
@@ -225,7 +224,7 @@
                 <div class="step-icon"><i class="bi bi-list-columns-reverse"></i></div>
                 <div class="flex-grow-1">
                   <h5 class="fw-bold mb-0">属性配置</h5>
-                  <div class="text-muted small">定义设备采集数据点，支持 CSV 批量导入导出与事件绑定</div>
+                  <div class="text-muted small">定义设备采集数据点，支持 CSV 批量导入导出</div>
                 </div>
                 <div class="d-flex gap-2">
                   <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('csv-input').click()">
@@ -249,7 +248,7 @@
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
-                      <th>索引</th><th>属性ID</th><th>名称</th><th>数据类型</th><th>单位</th><th>读写</th><th>系数</th><th>事件绑定</th><th style="width:90px">操作</th>
+                      <th>索引</th><th>属性ID</th><th>名称</th><th>数据类型</th><th>单位</th><th>读写</th><th>系数</th><th style="width:90px">操作</th>
                     </tr>
                   </thead>
                   <tbody id="props-tbody"></tbody>
@@ -257,39 +256,8 @@
               </div>
             </div>
 
-            <!-- ─── Step 3 · 事件配置 ─── -->
+            <!-- ─── Step 3 · 预览导出 ─── -->
             <div id="step-3" class="step-panel d-none">
-              <div class="step-heading">
-                <div class="step-icon"><i class="bi bi-bell"></i></div>
-                <div class="flex-grow-1">
-                  <h5 class="fw-bold mb-0">事件配置</h5>
-                  <div class="text-muted small">定义设备事件与触发规则，可在属性中绑定</div>
-                </div>
-                <div class="d-flex gap-2">
-                  <button class="btn btn-primary btn-sm" onclick="openEventModal()">
-                    <i class="bi bi-plus-lg me-1"></i>添加事件
-                  </button>
-                </div>
-              </div>
-
-              <div id="events-empty" class="empty-state d-none">
-                <i class="bi bi-bell-slash"></i>
-                <div>暂无事件，点击「添加事件」开始配置</div>
-              </div>
-              <div id="events-table-wrap" class="table-responsive">
-                <table class="table table-hover align-middle">
-                  <thead>
-                    <tr>
-                      <th>索引</th><th>事件ID</th><th>名称</th><th>等级</th><th>触发类型</th><th>触发阈值</th><th>回差区间</th><th>延迟触发(ms)</th><th style="width:90px">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody id="events-tbody"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- ─── Step 4 · 预览导出 ─── -->
-            <div id="step-4" class="step-panel d-none">
               <div class="step-heading">
                 <div class="step-icon"><i class="bi bi-file-earmark-check"></i></div>
                 <div class="flex-grow-1">
@@ -299,9 +267,8 @@
               </div>
 
               <div class="row g-3 mb-3">
-                <div class="col-md-4"><div class="summary-card"><div class="val" id="sum-name">—</div><div class="lbl">档案名称</div></div></div>
-                <div class="col-md-4"><div class="summary-card"><div class="val" id="sum-props">0</div><div class="lbl">属性数量</div></div></div>
-                <div class="col-md-4"><div class="summary-card"><div class="val" id="sum-events">0</div><div class="lbl">事件数量</div></div></div>
+                <div class="col-md-6"><div class="summary-card"><div class="val" id="sum-name">—</div><div class="lbl">档案名称</div></div></div>
+                <div class="col-md-6"><div class="summary-card"><div class="val" id="sum-props">0</div><div class="lbl">属性数量</div></div></div>
               </div>
 
               <div class="preview-label"><i class="bi bi-diagram-3 me-1"></i>采集配置 (collector-config.json)</div>
@@ -320,7 +287,7 @@
           </div>
           <button class="nav-arrow" id="btn-next" onclick="nextStep()" title="下一步">&#8250;</button>
         </div>
-        <div class="step-counter" id="step-counter">第 1 步 / 共 4 步</div>
+        <div class="step-counter" id="step-counter">第 1 步 / 共 3 步</div>
 
         </div><!-- /#device-wizard -->
       </section>
@@ -735,93 +702,11 @@
               <input type="text" class="form-control" id="pm-regoffset" placeholder="支持 10进制 或 0x16进制" onblur="normRegField('pm-regoffset')">
             </div>
           </div>
-
-          <div class="form-section-divider"><span><i class="bi bi-bell me-1"></i>事件映射</span></div>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件绑定</label>
-              <select class="form-select" id="pm-event">
-                <option value="">无</option>
-              </select>
-            </div>
-          </div>
         </form>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
         <button type="button" class="btn btn-primary" onclick="saveProp()"><i class="bi bi-check-lg me-1"></i>保存</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════ Event Modal ═══════════ -->
-<div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="eventModalTitle">编辑事件</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-      </div>
-      <div class="modal-body">
-        <form id="form-event" novalidate>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件索引</label>
-              <input type="text" class="form-control" id="em-index" placeholder="自动生成" readonly>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件ID</label>
-              <input type="text" class="form-control" id="em-id" placeholder="自动生成，可修改">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件名称 <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="em-name" required placeholder="如 电压过高">
-              <div class="invalid-feedback">事件名称不能为空</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件描述</label>
-              <input type="text" class="form-control" id="em-desc" placeholder="事件描述（可选）">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">事件等级 <span class="text-danger">*</span></label>
-              <select class="form-select" id="em-level" required>
-                <option value="">请选择</option>
-                <option value="info">提示</option>
-                <option value="warning">告警</option>
-                <option value="fault">故障</option>
-              </select>
-              <div class="invalid-feedback">请选择事件等级</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">触发类型 <span class="text-danger">*</span></label>
-              <select class="form-select" id="em-type" required onchange="onTriggerTypeChange()">
-                <option value="">请选择</option>
-                <option value="eq">等值触发</option>
-                <option value="upper">越上限触发</option>
-                <option value="lower">越下限触发</option>
-              </select>
-              <div class="invalid-feedback">请选择触发类型</div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">触发阈值 <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="em-threshold" required placeholder="如 250">
-              <div class="invalid-feedback">触发阈值不能为空</div>
-            </div>
-            <div class="col-md-6" id="em-deadband-wrap">
-              <label class="form-label fw-semibold">回差区间</label>
-              <input type="number" step="any" class="form-control" id="em-deadband" placeholder="仅越限触发，防抖动">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">延迟触发（ms）</label>
-              <input type="number" min="0" step="1" class="form-control" id="em-duration" placeholder="延迟毫秒后触发，防止抖动；0为立刻触发">
-            </div>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
-        <button type="button" class="btn btn-primary" onclick="saveEvent()"><i class="bi bi-check-lg me-1"></i>保存</button>
       </div>
     </div>
   </div>

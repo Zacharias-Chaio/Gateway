@@ -51,6 +51,7 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		s.reloadEngine()
 		ok(w, c)
 		return
 	}
@@ -70,6 +71,7 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.reloadEngine()
 	ok(w, c)
 }
 
@@ -89,7 +91,20 @@ func (s *Server) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "链路不存在: id="+strconv.Itoa(id))
 		return
 	}
+	s.reloadEngine()
 	ok(w, map[string]int{"id": id})
+}
+
+// reloadEngine 拉取全量链路并触发引擎热重载；引擎未启用时静默跳过。
+func (s *Server) reloadEngine() {
+	if s.Engine == nil {
+		return
+	}
+	var list []store.Channel
+	if err := s.DB.Order("id asc").Find(&list).Error; err != nil {
+		return
+	}
+	s.Engine.Apply(list)
 }
 
 // channelResourceKey 提取链路占用的硬件资源唯一键：串口/CAN 以端口名唯一，

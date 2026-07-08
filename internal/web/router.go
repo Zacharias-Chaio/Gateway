@@ -2,11 +2,13 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"time"
 
 	"gateway/internal/api"
+	"gateway/internal/engine"
 	"gateway/internal/logx"
 
 	"github.com/go-chi/chi/v5"
@@ -37,12 +39,16 @@ func requestLogger(next http.Handler) http.Handler {
 }
 
 // Router 组装静态页面与 REST API。
-func Router(db *gorm.DB, hardwarePath string) http.Handler {
+// eng 为链路引擎，用于链路热重载与状态查询；允许为 nil。
+func Router(db *gorm.DB, hardwarePath string, eng *engine.Engine) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 
 	s := api.New(db, hardwarePath)
+	if eng != nil {
+		s.Engine = eng
+	}
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/models", s.ListModels)
 		r.Post("/models", s.SaveModel)
@@ -58,6 +64,9 @@ func Router(db *gorm.DB, hardwarePath string) http.Handler {
 
 		r.Get("/hardware", s.GetHardware)
 
+		// 链路引擎运行状态。
+		r.Get("/engine/status", engineStatusHandler(eng))
+
 		// 系统日志出口：快照拉取 + SSE 实时推送。
 		r.Get("/syslog", logx.SyslogHandler())
 		r.Get("/syslog/stream", logx.SyslogStreamHandler())
@@ -66,4 +75,16 @@ func Router(db *gorm.DB, hardwarePath string) http.Handler {
 	sub, _ := fs.Sub(staticFS, "static")
 	r.Handle("/*", http.FileServer(http.FS(sub)))
 	return r
+}
+
+// engineStatusHandler 返回 GET /api/engine/status：各链路运行状态快照。
+func engineStatusHandler(eng *engine.Engine) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var data any = []any{}
+		if eng != nil {
+			data = eng.Status()
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": data})
+	}
 }

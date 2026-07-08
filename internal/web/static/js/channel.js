@@ -1,7 +1,7 @@
 /* ══════════════ 链路配置 · Channels ══════════════ */
 function emptyChannel() {
   return { id: 0, name:'', type:'', frameInterval:'', reconnectRetries:'3', resendRetries:'3', serialName:'', baudRate:'9600', dataBits:'8', parity:'None', stopBits:'1',
-    nicName:'', deviceIp:'', devicePort:'', canName:'', canBaud:'250000', devices: [] };
+    deviceIp:'', devicePort:'', canName:'', canBaud:'250000', devices: [] };
 }
 function onChannelTypeChange() {
   const t = document.getElementById('ch-type').value;
@@ -26,10 +26,8 @@ function hwOptionsHtml(category, selected) {
 function fillHardwareSelects() {
   const c = state.channel || {};
   const s = document.getElementById('ch-serialName');
-  const n = document.getElementById('ch-nicName');
   const k = document.getElementById('ch-canName');
   if (s) s.innerHTML = hwOptionsHtml('Serial', c.serialName);
-  if (n) n.innerHTML = hwOptionsHtml('Ethernet', c.nicName);
   if (k) k.innerHTML = hwOptionsHtml('CAN', c.canName);
 }
 function hwNode(category, key) {
@@ -218,7 +216,7 @@ function syncChannelFromForm() {
   c.name = val('ch-name'); c.type = val('ch-type');
   c.frameInterval = val('ch-frameInterval'); c.reconnectRetries = val('ch-reconnectRetries'); c.resendRetries = val('ch-resendRetries');
   c.serialName = val('ch-serialName'); c.baudRate = val('ch-baud'); c.dataBits = val('ch-dataBits'); c.parity = val('ch-parity'); c.stopBits = val('ch-stopBits');
-  c.nicName = val('ch-nicName'); c.deviceIp = val('ch-deviceIp'); c.devicePort = val('ch-devicePort');
+  c.deviceIp = val('ch-deviceIp'); c.devicePort = val('ch-devicePort');
   c.canName = val('ch-canName'); c.canBaud = val('ch-canBaud');
   c.devices = readChannelDeviceRows();
 }
@@ -284,7 +282,7 @@ function buildChannelConfig(c) {
     frameInterval: toNum(c.frameInterval, null), reconnectRetries: toNum(c.reconnectRetries, null), resendRetries: toNum(c.resendRetries, null),
     devices };
   if (c.type === 'Serial') Object.assign(base, { serialName: hwNode('Serial', c.serialName), baudRate: toNum(c.baudRate, null), dataBits: toNum(c.dataBits, null), parity: c.parity, stopBits: c.stopBits });
-  if (c.type === 'Network') Object.assign(base, { nicName: hwNode('Ethernet', c.nicName), deviceIp: c.deviceIp, devicePort: c.devicePort === '' ? null : toNum(c.devicePort, null) });
+  if (c.type === 'Network') Object.assign(base, { deviceIp: c.deviceIp, devicePort: c.devicePort === '' ? null : toNum(c.devicePort, null) });
   if (c.type === 'CAN') Object.assign(base, { canName: hwNode('CAN', c.canName), canBaud: toNum(c.canBaud, null) });
   return base;
 }
@@ -302,7 +300,7 @@ function deleteChannel(idx) {
 }
 function channelConfigTags(c) {
   if (c.type === 'Serial') return [c.serialName ? `串口：${c.serialName}` : '', `${c.baudRate} bps`, `${c.dataBits}${PARITY_LABEL[c.parity] || c.parity}${c.stopBits}`];
-  if (c.type === 'Network') return [c.nicName ? `网卡：${c.nicName}` : '', (c.deviceIp ? c.deviceIp : '') + (c.devicePort ? ':' + c.devicePort : '')];
+  if (c.type === 'Network') return [(c.deviceIp ? c.deviceIp : '') + (c.devicePort ? ':' + c.devicePort : '')];
   if (c.type === 'CAN') return [c.canName ? `CAN：${c.canName}` : '', `${Number(c.canBaud) / 1000} kbps`];
   return [];
 }

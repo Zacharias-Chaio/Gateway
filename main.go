@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gateway/internal/config"
+	"gateway/internal/engine"
 	"gateway/internal/logx"
 	"gateway/internal/store"
 	"gateway/internal/web"
@@ -47,14 +48,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &http.Server{Addr: *addr, Handler: web.Router(db, *hwPath)}
-
-	// 监听中断/终止信号，实现优雅退出。
+	// 监听中断/终止信号，实现优雅退出；该 ctx 同时作为链路引擎的父上下文。
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 创建链路引擎，加载已保存的链路并启动（每条链路一个 goroutine）。
+	eng := engine.New(ctx)
+	var channels []store.Channel
+	if err := db.Order("id asc").Find(&channels).Error; err != nil {
+		logger.Warn("加载链路配置失败，引擎以空配置启动", "err", err)
+	}
+	eng.Apply(channels)
+
+	srv := &http.Server{Addr: *addr, Handler: web.Router(db, *hwPath, eng)}
+
 	go func() {
-		logger.Info("网关配置服务启动", "addr", *addr, "url", "http://localhost"+*addr)
+		logger.Info("网关微服务启动", "addr", *addr, "url", "http://localhost"+*addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("服务异常退出", "err", err)
 			os.Exit(1)
@@ -64,6 +73,8 @@ func main() {
 	<-ctx.Done()
 	stop() // 恢复默认信号处理：再次 Ctrl+C 可强制退出
 	logger.Info("正在关闭服务…")
+
+	eng.Stop() // 关闭所有链路 goroutine
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

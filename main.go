@@ -52,13 +52,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 创建链路引擎，加载已保存的链路并启动（每条链路一个 goroutine）。
+	// 创建链路引擎，加载已保存的链路和设备模型并启动（每条链路一个 goroutine）。
 	eng := engine.New(ctx)
 	var channels []store.Channel
 	if err := db.Order("id asc").Find(&channels).Error; err != nil {
 		logger.Warn("加载链路配置失败，引擎以空配置启动", "err", err)
 	}
-	eng.Apply(channels)
+	var models []store.DeviceModel
+	if err := db.Order("profile_index asc").Find(&models).Error; err != nil {
+		logger.Warn("加载设备模型失败，引擎以空模型启动", "err", err)
+	}
+	plans, warnings := engine.BuildPlans(channels, models)
+	for _, wn := range warnings {
+		logger.Warn("采集计划构建警告", "warn", wn)
+	}
+	eng.Apply(plans, models)
 
 	srv := &http.Server{Addr: *addr, Handler: web.Router(db, *hwPath, eng)}
 

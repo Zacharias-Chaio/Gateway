@@ -19,13 +19,16 @@ function normRegField(id) {
 }
 function sanitize(name) { return (String(name || '').replace(/[\\/:*?"<>|]/g, '_').trim()) || 'device'; }
 
+/* ══════════════ Deep copy ══════════════ */
+function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
 /* ══════════════ Sidebar ══════════════ */
 function switchSection(key) {
   document.querySelectorAll('.app-section').forEach(s => s.classList.add('d-none'));
   document.getElementById('section-' + key).classList.remove('d-none');
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   document.getElementById('nav-' + key).classList.add('active');
-  if (key === 'realtime') renderRealtime();
+  if (key === 'realtime') renderRealtime(); else rtStopPolling();
   if (key === 'log') renderLogSelectors();
 }
 

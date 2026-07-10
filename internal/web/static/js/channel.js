@@ -1,6 +1,6 @@
 /* ══════════════ 链路配置 · Channels ══════════════ */
 function emptyChannel() {
-  return { id: 0, name:'', type:'', frameInterval:'', reconnectRetries:'3', resendRetries:'3', serialName:'', baudRate:'9600', dataBits:'8', parity:'None', stopBits:'1',
+  return { id: 0, name:'', type:'', reconnectRetries:'0', resendRetries:'3', pollInterval:'500', serialName:'', baudRate:'9600', dataBits:'8', parity:'None', stopBits:'1',
     deviceIp:'', devicePort:'', canName:'', canBaud:'250000', devices: [] };
 }
 function onChannelTypeChange() {
@@ -201,7 +201,7 @@ function backToChannelList() {
 function fillChannelForm() {
   const c = state.channel || emptyChannel();
   setVal('ch-id', c.id); setVal('ch-name', c.name); setVal('ch-type', c.type);
-  setVal('ch-frameInterval', c.frameInterval); setVal('ch-reconnectRetries', c.reconnectRetries); setVal('ch-resendRetries', c.resendRetries);
+  setVal('ch-reconnectRetries', c.reconnectRetries); setVal('ch-resendRetries', c.resendRetries); setVal('ch-pollInterval', c.pollInterval);
   setVal('ch-baud', c.baudRate); setVal('ch-dataBits', c.dataBits);
   setVal('ch-parity', c.parity); setVal('ch-stopBits', c.stopBits);
   setVal('ch-deviceIp', c.deviceIp); setVal('ch-devicePort', c.devicePort);
@@ -214,7 +214,7 @@ function syncChannelFromForm() {
   if (!state.channel) return;
   const c = state.channel;
   c.name = val('ch-name'); c.type = val('ch-type');
-  c.frameInterval = val('ch-frameInterval'); c.reconnectRetries = val('ch-reconnectRetries'); c.resendRetries = val('ch-resendRetries');
+  c.reconnectRetries = val('ch-reconnectRetries'); c.resendRetries = val('ch-resendRetries'); c.pollInterval = val('ch-pollInterval');
   c.serialName = val('ch-serialName'); c.baudRate = val('ch-baud'); c.dataBits = val('ch-dataBits'); c.parity = val('ch-parity'); c.stopBits = val('ch-stopBits');
   c.deviceIp = val('ch-deviceIp'); c.devicePort = val('ch-devicePort');
   c.canName = val('ch-canName'); c.canBaud = val('ch-canBaud');
@@ -279,7 +279,7 @@ function buildChannelConfig(c) {
     return { index: i, commNo: toNum(d.commNo, null), modelId: d.modelId || null, modelName: (m && m.profile && m.profile.name) || null };
   });
   const base = { id: c.id, name: c.name, type: c.type,
-    frameInterval: toNum(c.frameInterval, null), reconnectRetries: toNum(c.reconnectRetries, null), resendRetries: toNum(c.resendRetries, null),
+    reconnectRetries: toNum(c.reconnectRetries, null), resendRetries: toNum(c.resendRetries, null), pollInterval: toNum(c.pollInterval, null),
     devices };
   if (c.type === 'Serial') Object.assign(base, { serialName: hwNode('Serial', c.serialName), baudRate: toNum(c.baudRate, null), dataBits: toNum(c.dataBits, null), parity: c.parity, stopBits: c.stopBits });
   if (c.type === 'Network') Object.assign(base, { deviceIp: c.deviceIp, devicePort: c.devicePort === '' ? null : toNum(c.devicePort, null) });

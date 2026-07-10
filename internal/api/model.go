@@ -44,6 +44,7 @@ func (s *Server) SaveModel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.reloadEngine()
 	ok(w, m)
 }
 
@@ -63,5 +64,6 @@ func (s *Server) DeleteModel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "设备模型不存在: id="+id)
 		return
 	}
+	s.reloadEngine()
 	ok(w, map[string]string{"id": id})
 }

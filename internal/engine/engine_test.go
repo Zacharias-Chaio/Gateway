@@ -8,7 +8,6 @@ import (
 	"gorm.io/datatypes"
 
 	"gateway/internal/engine/connector"
-	"gateway/internal/engine/converter/modbus"
 	"gateway/internal/store"
 )
 
@@ -28,6 +27,17 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 func networkChannel(id int, name, ip string, port int) store.Channel {
 	cfg := `{"deviceIp":"` + ip + `","devicePort":` + itoa(port) + `}`
 	return store.Channel{ID: id, Name: name, Type: connector.TypeNetwork, Config: datatypes.JSON(cfg)}
+}
+
+// toPlan 将 store.Channel 转换为最小可执行的 ChannelPlan（无设备，仅维持连接）。
+func toPlan(ch store.Channel) ChannelPlan {
+	return ChannelPlan{
+		ChannelID:   ch.ID,
+		ChannelName: ch.Name,
+		ChannelType: ch.Type,
+		Config:      ch.Config,
+		PollMs:      0, // 默认 1 秒
+	}
 }
 
 func itoa(n int) string {
@@ -57,15 +67,15 @@ func TestEngineApplyStartStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// mock 服务提供一个可连接的目标，让 worker 能进入已连接状态。
-	srv, err := modbus.StartMockServer(ctx, "127.0.0.1:0")
+	// 本地 TCP 测试服务提供一个可连接的目标，让 worker 能进入已连接状态。
+	srv, err := startEchoServer(ctx, "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("启动 mock 服务失败: %v", err)
+		t.Fatalf("启动 TCP 测试服务失败: %v", err)
 	}
-	defer srv.Close()
-	host, port, ok := splitHostPort(srv.Addr())
+	defer srv.close()
+	host, port, ok := splitHostPort(srv.addr())
 	if !ok {
-		t.Fatalf("解析地址失败: %s", srv.Addr())
+		t.Fatalf("解析地址失败: %s", srv.addr())
 	}
 
 	eng := New(ctx)
@@ -73,7 +83,7 @@ func TestEngineApplyStartStop(t *testing.T) {
 
 	// 启动一条链路。
 	ch := networkChannel(1, "链路A", host, port)
-	eng.Apply([]store.Channel{ch})
+	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
 	if !waitFor(t, 2*time.Second, func() bool {
 		st := eng.Status()
 		return len(st) == 1 && st[0].Connected
@@ -82,13 +92,13 @@ func TestEngineApplyStartStop(t *testing.T) {
 	}
 
 	// 相同配置再次 Apply：不应重启（worker 指纹未变，仍连接）。
-	eng.Apply([]store.Channel{ch})
+	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
 	if st := eng.Status(); len(st) != 1 {
 		t.Fatalf("重复 Apply 后链路数错误: %d", len(st))
 	}
 
 	// 删除链路：worker 应被停止移除。
-	eng.Apply(nil)
+	eng.Apply(nil, nil)
 	if !waitFor(t, 2*time.Second, func() bool {
 		return len(eng.Status()) == 0
 	}) {
@@ -106,7 +116,7 @@ func TestEngineUnsupportedSkipped(t *testing.T) {
 	defer eng.Stop()
 
 	ch := store.Channel{ID: 7, Name: "CAN链路", Type: connector.TypeCAN, Config: datatypes.JSON(`{"canName":"can0","canBaud":250000}`)}
-	eng.Apply([]store.Channel{ch})
+	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
 
 	// worker 会创建但 Open 持续失败（ErrNotSupported），状态应为未连接。
 	if !waitFor(t, time.Second, func() bool {

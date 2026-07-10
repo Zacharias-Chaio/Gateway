@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gateway/internal/engine"
+	"gateway/internal/logx"
 	"gateway/internal/store"
 
 	"github.com/go-chi/chi/v5"
@@ -95,16 +97,24 @@ func (s *Server) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	ok(w, map[string]int{"id": id})
 }
 
-// reloadEngine 拉取全量链路并触发引擎热重载；引擎未启用时静默跳过。
+// reloadEngine 拉取全量链路和设备模型，构建采集计划并触发引擎热重载；引擎未启用时静默跳过。
 func (s *Server) reloadEngine() {
 	if s.Engine == nil {
 		return
 	}
-	var list []store.Channel
-	if err := s.DB.Order("id asc").Find(&list).Error; err != nil {
+	var channels []store.Channel
+	if err := s.DB.Order("id asc").Find(&channels).Error; err != nil {
 		return
 	}
-	s.Engine.Apply(list)
+	var models []store.DeviceModel
+	if err := s.DB.Order("profile_index asc").Find(&models).Error; err != nil {
+		return
+	}
+	plans, warnings := engine.BuildPlans(channels, models)
+	for _, msg := range warnings {
+		logx.Module("api").Warn("采集计划警告", "warning", msg)
+	}
+	s.Engine.Apply(plans, models)
 }
 
 // channelResourceKey 提取链路占用的硬件资源唯一键：串口/CAN 以端口名唯一，

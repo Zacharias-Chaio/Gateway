@@ -10,7 +10,8 @@ function apiGet(p) { return apiReq(p); }
 function apiPost(p, body) { return apiReq(p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }); }
 function apiDelete(p) { return apiReq(p, { method:'DELETE' }); }
 function modelToPayload(m) {
-  return { id: m.profile.profileId, profileIndex: toNum(m.profile.profileIndex, 0), name: m.profile.name || '', profile: m.profile, properties: m.properties };
+  const id = m.profile.profileId || m.id;
+  return { id, profileIndex: toNum(m.profile.profileIndex, 0), name: m.profile.name || '', profile: m.profile, properties: m.properties };
 }
 async function loadModels() {
   try {
@@ -27,7 +28,7 @@ async function loadHardware() {
 /* ── 链路持久化（/api/channels）── */
 function channelFromRow(r) {
   return { id: toNum(r.id, 0), name: r.name || '', type: r.type || '',
-    frameInterval: r.config && r.config.frameInterval, reconnectRetries: r.config && r.config.reconnectRetries, resendRetries: r.config && r.config.resendRetries,
+    reconnectRetries: r.config && r.config.reconnectRetries, resendRetries: r.config && r.config.resendRetries, pollInterval: r.config && r.config.pollInterval,
     serialName: hwKey('Serial', r.config && r.config.serialName), baudRate: r.config && r.config.baudRate, dataBits: r.config && r.config.dataBits, parity: r.config && r.config.parity, stopBits: r.config && r.config.stopBits,
     deviceIp: r.config && r.config.deviceIp, devicePort: r.config && r.config.devicePort,
     canName: hwKey('CAN', r.config && r.config.canName), canBaud: r.config && r.config.canBaud,

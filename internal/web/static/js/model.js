@@ -37,18 +37,18 @@ function validateProfile() {
   return form.checkValidity();
 }
 function syncProfileFromForm() {
-  state.profile.profileIndex = val('pf-profileIndex');
+  state.profile.profileIndex = toNum(val('pf-profileIndex'), null);
   state.profile.profileId = val('pf-profileId');
   state.profile.name = val('pf-name');
   state.profile.manufacturer = val('pf-manufacturer');
   state.profile.description = val('pf-description');
   state.profile.deviceType = val('pf-deviceType');
   state.profile.deviceModel = val('pf-deviceModel');
-  state.profile.ratedPower = val('pf-ratedPower');
+  state.profile.ratedPower = toNum(val('pf-ratedPower'), null);
   state.profile.interfaceType = val('pf-interface');
   state.profile.protocolType = val('pf-protocol');
   state.profile.protocolVersion = val('pf-version');
-  state.profile.maxRegisterCount = val('pf-maxRegs');
+  state.profile.maxRegisterCount = toNum(val('pf-maxRegs'), 100);
 }
 function fillProfileForm() {
   setVal('pf-profileIndex', state.profile.profileIndex);
@@ -62,19 +62,18 @@ function fillProfileForm() {
   setVal('pf-interface', state.profile.interfaceType);
   rebuildProtocolOptions(state.profile.protocolType);
   setVal('pf-version', state.profile.protocolVersion);
-  setVal('pf-maxRegs', state.profile.maxRegisterCount ?? 125);
+  setVal('pf-maxRegs', state.profile.maxRegisterCount ?? 100);
 }
 
 /* ══════════════ Project import / export (整体) ══════════════ */
 /* ══════════════ Device model landing (multi-model) ══════════════ */
 const IFACE_LABEL = { Serial:'串口', Network:'网络', CAN:'CAN' };
 function ifaceLabel(v) { return IFACE_LABEL[v] || v || '—'; }
-function emptyProfile() { return { profileIndex:'', profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:'', interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 125 }; }
-function genModelId() { return 'model_' + Date.now() + '_' + Math.floor(Math.random() * 1000); }
-function uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; const v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16); }); }
+function emptyProfile() { return { profileIndex:null, profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:null, interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 100 }; }
+function genModelId() { return nextProfileId(); } // 统一使用 UUID 作为模型 ID，与后端一致
+function uuid() { return crypto.randomUUID(); }
 function nextProfileId() { return uuid(); }
 function nextProfileIndex() { let n = 0; while (state.models.some(m => m.profile && String(m.profile.profileIndex) === String(n))) n++; return n; }
-function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 function loadModelIntoBuffer(m) {
   state.profile = deepCopy(m.profile);
   state.properties = deepCopy(m.properties);
@@ -88,13 +87,14 @@ function saveBufferIntoModel() {
 }
 function newModel() {
   const prof = emptyProfile();
-  prof.profileId = nextProfileId();
+  const modelId = nextProfileId();
+  prof.profileId = modelId;
   prof.profileIndex = nextProfileIndex();
   const m = {
-    id: genModelId(),
+    id: modelId,
     profile: prof,
     properties: [
-      { id:'online', name:'在线状态', description:'0-离线 1-在线', dataType:'bool', unit:'', accessMode:'r', dataLength:'', base:'0', coefficient:'1', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' }
+      { id:'online', name:'在线状态', description:'0-离线 1-在线', dataType:'bool', unit:'', accessMode:'r', startBit:0, endBit:0, deltaValue:0, coefficient:1, readFunctionCode:null, writeFunctionCode:null, registerBase:null, registerOffset:null, byteOrder:'' }
     ]
   };
   state.models.push(m);
@@ -204,14 +204,15 @@ function openPropModal(idx = -1) {
   const form = document.getElementById('form-prop');
   form.classList.remove('was-validated');
   const p = idx >= 0 ? state.properties[idx]
-    : { id:'', name:'', description:'', dataType:'', unit:'', accessMode:'', dataLength:'', base:'0', coefficient:'1', readFunctionCode:'', writeFunctionCode:'', registerBase:'', registerOffset:'', byteOrder:'' };
+    : { id:'', name:'', description:'', dataType:'', unit:'', accessMode:'', startBit:0, endBit:0, deltaValue:0, coefficient:1, readFunctionCode:null, writeFunctionCode:null, registerBase:null, registerOffset:null, byteOrder:'' };
   setVal('pm-index', idx >= 0 ? idx : state.properties.length);
   setVal('pm-id', p.id); setVal('pm-name', p.name); setVal('pm-desc', p.description);
   setVal('pm-dataType', p.dataType); setVal('pm-unit', p.unit); setVal('pm-access', p.accessMode);
-  setVal('pm-length', p.dataLength);
-  setVal('pm-base', p.base); setVal('pm-coef', p.coefficient);
-  setVal('pm-readfunc', p.readFunctionCode); setVal('pm-writefunc', p.writeFunctionCode);
-  setVal('pm-regbase', p.registerBase); setVal('pm-regoffset', p.registerOffset); setVal('pm-byteorder', p.byteOrder);
+  setVal('pm-startbit', p.startBit ?? 0);
+  setVal('pm-endbit', p.endBit ?? 0);
+  setVal('pm-base', p.deltaValue ?? (p.base ?? 0)); setVal('pm-coef', p.coefficient);
+  setVal('pm-readfunc', p.readFunctionCode ?? ''); setVal('pm-writefunc', p.writeFunctionCode ?? '');
+  setVal('pm-regbase', p.registerBase != null ? p.registerBase : ''); setVal('pm-regoffset', p.registerOffset != null ? p.registerOffset : ''); setVal('pm-byteorder', p.byteOrder);
   document.getElementById('pm-id').readOnly = isLocked(idx);
   document.getElementById('propModalTitle').textContent = idx >= 0 ? '编辑属性' : '添加属性';
   propModal.show();
@@ -224,10 +225,24 @@ function saveProp() {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) { alert('属性ID 格式非法，需以字母或下划线开头'); return; }
   const dup = state.properties.findIndex(p => p.id === id);
   if (dup >= 0 && dup !== propEditIndex) { alert('属性ID 已存在：' + id); return; }
+  const dataType = val('pm-dataType');
+  const startBit = toNum(val('pm-startbit'), 0);
+  const endBit = toNum(val('pm-endbit'), 0);
+  if (endBit < startBit) { alert('终止位不能小于起始位'); return; }
+  // 校验：位区间不能超过寄存器数×16
+  const regCount = Math.floor(endBit / 16) + 1; // 终止位决定的寄存器数
+  if (endBit - startBit >= regCount * 16) { alert(`位区间超出寄存器宽度：起始位 ${startBit}、终止位 ${endBit}，占用 ${regCount} 个寄存器（${regCount * 16} 位），位区间需小于 ${regCount * 16}`); return; }
   const p = {
-    id, name: val('pm-name'), description: val('pm-desc'), dataType: val('pm-dataType'), unit: val('pm-unit'),
-    accessMode: val('pm-access'), dataLength: val('pm-length'), base: val('pm-base') || '0', coefficient: val('pm-coef') || '1',
-    readFunctionCode: val('pm-readfunc'), writeFunctionCode: val('pm-writefunc'), registerBase: parseRegAddr(val('pm-regbase')), registerOffset: parseRegAddr(val('pm-regoffset')), byteOrder: val('pm-byteorder')
+    id, name: val('pm-name'), description: val('pm-desc'), dataType, unit: val('pm-unit'),
+    accessMode: val('pm-access'),
+    startBit, endBit,
+    deltaValue: toNum(val('pm-base'), 0),
+    coefficient: toNum(val('pm-coef'), 1),
+    readFunctionCode: toNum(val('pm-readfunc'), null),
+    writeFunctionCode: toNum(val('pm-writefunc'), null),
+    registerBase: toNum(parseRegAddr(val('pm-regbase')), null),
+    registerOffset: toNum(parseRegAddr(val('pm-regoffset')), null),
+    byteOrder: val('pm-byteorder')
   };
   if (propEditIndex >= 0) state.properties[propEditIndex] = p; else state.properties.push(p);
   propModal.hide();
@@ -246,14 +261,17 @@ function renderProps() {
   if (!state.properties.length) { tb.innerHTML = ''; empty.classList.remove('d-none'); wrap.classList.add('d-none'); return; }
   empty.classList.add('d-none'); wrap.classList.remove('d-none');
   tb.innerHTML = state.properties.map((p, i) => {
+    const bitRange = (p.startBit != null && p.endBit != null) ? `${p.startBit}~${p.endBit}` : '—';
     return `<tr>
       <td>${i}</td>
       <td><code>${escapeHtml(p.id)}</code></td>
       <td>${escapeHtml(p.name)}</td>
       <td>${escapeHtml(dataTypeLabel(p.dataType))}</td>
+      <td>${escapeHtml(String(p.deltaValue ?? p.base ?? 0))}</td>
+      <td>${escapeHtml(String(p.coefficient ?? '1'))}</td>
       <td>${escapeHtml(p.unit || '—')}</td>
       <td><span class="badge badge-${escapeHtml(p.accessMode)}">${escapeHtml((p.accessMode || '').toUpperCase())}</span></td>
-      <td>${escapeHtml(String(p.coefficient ?? '1'))}</td>
+      <td>${escapeHtml(bitRange)}</td>
       <td class="text-nowrap">
         ${isLocked(i) ? '<span class="text-muted" title="默认属性不可删除"><i class="bi bi-lock"></i></span>' : `<button class="btn btn-sm btn-link p-0 me-2" onclick="openPropModal(${i})" title="编辑"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-sm btn-link p-0 text-danger" onclick="deleteProp(${i})" title="删除"><i class="bi bi-trash"></i></button>`}
@@ -268,8 +286,8 @@ function exportPropsCsv() {
   if (!state.properties.length) { alert('暂无属性可导出'); return; }
   const lines = [CSV_HEADERS.map(csvCell).join(',')];
   state.properties.forEach(p => {
-    lines.push([p.id, p.name, p.description, DT_LABEL[p.dataType] || p.dataType, p.dataLength, ACCESS_LABEL[p.accessMode] || p.accessMode,
-      p.base, p.coefficient, p.unit, p.readFunctionCode, p.writeFunctionCode, p.registerBase, p.registerOffset, p.byteOrder
+    lines.push([p.id, p.name, p.description, DT_LABEL[p.dataType] || p.dataType, p.startBit ?? '', p.endBit ?? '', ACCESS_LABEL[p.accessMode] || p.accessMode,
+      p.deltaValue ?? p.base ?? 0, p.coefficient, p.unit, p.readFunctionCode ?? '', p.writeFunctionCode ?? '', p.registerBase ?? '', p.registerOffset ?? '', p.byteOrder
     ].map(csvCell).join(','));
   });
   downloadBlob(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), sanitize(state.profile.name) + '-properties.csv');
@@ -322,9 +340,11 @@ function importPropsCsv(input) {
         if (!ACCESS_LABEL[acc]) throw new Error(`第 ${r + 1} 行：读写属性非法（${accRaw}）`);
         imported.push({
           id, name: get('name'), description: get('description'), dataType: dt, unit: get('unit'), accessMode: acc,
-          base: get('base') || '0', coefficient: get('coefficient') || '1',
-          registerAddress: get('registerAddress'),
-          dataSize: get('dataSize'), byteOrder: get('byteOrder'), bitOffset: get('bitOffset')
+          startBit: toNum(get('startBit'), 0), endBit: toNum(get('endBit'), 0),
+          deltaValue: toNum(get('deltaValue'), 0), coefficient: toNum(get('coefficient'), 1),
+          readFunctionCode: toNum(get('readFunctionCode'), null), writeFunctionCode: toNum(get('writeFunctionCode'), null),
+          registerBase: toNum(get('registerBase'), null), registerOffset: toNum(get('registerOffset'), null),
+          byteOrder: get('byteOrder')
         });
       }
       if (state.properties.length && !confirm(`将导入 ${imported.length} 条属性并覆盖当前 ${state.properties.length} 条，是否继续？`)) { input.value = ''; return; }
@@ -347,18 +367,18 @@ function buildCollectorConfig() {
   syncProfileFromForm();
   return {
     profile: {
-      profileIndex: state.profile.profileIndex === '' ? null : toNum(state.profile.profileIndex, null),
+      profileIndex: state.profile.profileIndex,
       profileId: state.profile.profileId || '',
       name: state.profile.name,
       manufacturer: state.profile.manufacturer || '',
       description: state.profile.description || '',
       deviceType: state.profile.deviceType || '',
       deviceModel: state.profile.deviceModel || '',
-      ratedPower: toNum(state.profile.ratedPower, null),
+      ratedPower: state.profile.ratedPower,
       interfaceType: state.profile.interfaceType,
       protocolType: state.profile.protocolType,
       protocolVersion: state.profile.protocolVersion || '',
-      maxRegisterCount: toNum(state.profile.maxRegisterCount, 125)
+      maxRegisterCount: state.profile.maxRegisterCount
     },
     properties: state.properties.map((p, i) => ({
       index: i,
@@ -368,13 +388,14 @@ function buildCollectorConfig() {
       dataType: p.dataType,
       unit: p.unit || '',
       accessMode: p.accessMode,
-      dataLength: (p.dataLength === '' || p.dataLength === undefined) ? null : p.dataLength,
-      base: toNum(p.base, 0),
-      coefficient: toNum(p.coefficient, 1),
-      readFunctionCode: p.readFunctionCode || '',
-      writeFunctionCode: p.writeFunctionCode || '',
-      registerBase: parseRegAddr(p.registerBase) || '',
-      registerOffset: (p.registerOffset === '' || p.registerOffset === undefined) ? null : toNum(parseRegAddr(p.registerOffset), null),
+      startBit: p.startBit ?? 0,
+      endBit: p.endBit ?? 0,
+      deltaValue: p.deltaValue ?? 0,
+      coefficient: p.coefficient,
+      readFunctionCode: p.readFunctionCode,
+      writeFunctionCode: p.writeFunctionCode,
+      registerBase: p.registerBase,
+      registerOffset: p.registerOffset,
       byteOrder: p.byteOrder || ''
     }))
   };

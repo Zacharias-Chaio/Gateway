@@ -57,6 +57,7 @@ type Config struct {
 	FrameInterval    int // 帧间隔（毫秒）
 	ReconnectRetries int // 连接失败重试次数
 	ResendRetries    int // 单帧重发次数
+	PollInterval     int // 轮询间隔（毫秒），0 表示使用默认值
 
 	// 串口参数。
 	SerialName string // 设备节点，如 /dev/ttyS1
@@ -115,6 +116,7 @@ func ParseConfig(ch store.Channel) (Config, error) {
 		FrameInterval    *int   `json:"frameInterval"`
 		ReconnectRetries *int   `json:"reconnectRetries"`
 		ResendRetries    *int   `json:"resendRetries"`
+		PollInterval     *int   `json:"pollInterval"`
 		SerialName       string `json:"serialName"`
 		BaudRate         *int   `json:"baudRate"`
 		DataBits         *int   `json:"dataBits"`
@@ -131,6 +133,7 @@ func ParseConfig(ch store.Channel) (Config, error) {
 	cfg.FrameInterval = deref(raw.FrameInterval)
 	cfg.ReconnectRetries = deref(raw.ReconnectRetries)
 	cfg.ResendRetries = deref(raw.ResendRetries)
+	cfg.PollInterval = deref(raw.PollInterval)
 	cfg.SerialName = raw.SerialName
 	cfg.BaudRate = deref(raw.BaudRate)
 	cfg.DataBits = deref(raw.DataBits)

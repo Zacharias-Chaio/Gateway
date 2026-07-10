@@ -6,6 +6,7 @@ import (
 	"gorm.io/datatypes"
 
 	"gateway/internal/store"
+
 	"go.bug.st/serial"
 )
 
@@ -18,7 +19,7 @@ func TestParseConfigSerial(t *testing.T) {
 		Config: datatypes.JSON(`{
 			"serialName":"/dev/ttyS1","baudRate":9600,"dataBits":8,
 			"parity":"Even","stopBits":1,"frameInterval":50,
-			"reconnectRetries":3,"resendRetries":2
+			"reconnectRetries":3,"resendRetries":2,"pollInterval":1000
 		}`),
 	}
 	cfg, err := ParseConfig(ch)
@@ -33,6 +34,9 @@ func TestParseConfigSerial(t *testing.T) {
 	}
 	if cfg.FrameInterval != 50 || cfg.ReconnectRetries != 3 || cfg.ResendRetries != 2 {
 		t.Fatalf("重试/节流参数错误: %+v", cfg)
+	}
+	if cfg.PollInterval != 1000 {
+		t.Fatalf("PollInterval 应为 1000, got %d", cfg.PollInterval)
 	}
 	if cfg.Target() != "/dev/ttyS1" {
 		t.Fatalf("Target 错误: %q", cfg.Target())

@@ -1,0 +1,32 @@
+{
+  "id": 1,
+  "name": "一楼电力监测",
+  "type": "Network",
+  "config": {
+    "id": 1,
+    "name": "一楼电力监测",
+    "type": "Network",
+    "frameInterval": 100,
+    "reconnectRetries": 3,
+    "resendRetries": 3,
+    "pollInterval": 1000,
+    "deviceIp": "192.168.1.100",
+    "devicePort": 502,
+    "devices": [
+      {
+        "index": 0,
+        "commNo": 1,
+        "modelId": "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab",
+        "modelName": "三相电力仪表"
+      }
+    ]
+  },
+  "devices": [
+    {
+      "index": 0,
+      "commNo": 1,
+      "modelId": "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab",
+      "modelName": "三相电力仪表"
+    }
+  ]
+}

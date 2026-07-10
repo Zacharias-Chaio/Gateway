@@ -212,7 +212,7 @@
                   </div>
                   <div class="col-md-6">
                     <label class="form-label fw-semibold">最大请求寄存器个数</label>
-                    <input type="number" min="1" max="125" class="form-control" id="pf-maxRegs" placeholder="默认 125">
+                    <input type="number" min="1" max="125" class="form-control" id="pf-maxRegs" placeholder="默认 100（上限 125）">
                   </div>
                 </div>
               </form>
@@ -248,7 +248,7 @@
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
-                      <th>索引</th><th>属性ID</th><th>名称</th><th>数据类型</th><th>单位</th><th>读写</th><th>系数</th><th style="width:90px">操作</th>
+                      <th>索引</th><th>属性ID</th><th>名称</th><th>数据类型</th><th>偏移量</th><th>系数</th><th>单位</th><th>读写</th><th>位区间</th><th style="width:90px">操作</th>
                     </tr>
                   </thead>
                   <tbody id="props-tbody"></tbody>
@@ -372,16 +372,18 @@
                       <div class="invalid-feedback">请选择通道类型</div>
                     </div>
                     <div class="col-md-6">
-                      <label class="form-label fw-semibold">帧间隔 (ms)</label>
-                      <input type="number" min="0" class="form-control" id="ch-frameInterval" placeholder="如 10">
+                      <label class="form-label fw-semibold">轮询间隔 (ms)</label>
+                      <input type="number" min="0" class="form-control" id="ch-pollInterval" placeholder="如 500">
                     </div>
                     <div class="col-md-6">
                       <label class="form-label fw-semibold">超时重连次数</label>
-                      <input type="number" min="0" class="form-control" id="ch-reconnectRetries" placeholder="如 3">
+                      <input type="number" min="0" class="form-control" id="ch-reconnectRetries" placeholder="0 = 无限重连">
+                      <div class="form-text">0 表示无限重连；N 表示尝试 N 次后停止</div>
                     </div>
                     <div class="col-md-6">
                       <label class="form-label fw-semibold">失败重发次数</label>
                       <input type="number" min="0" class="form-control" id="ch-resendRetries" placeholder="如 3">
+                      <div class="form-text">单帧发送失败的重试次数，超限后触发重连</div>
                     </div>
                   </div>
 
@@ -548,10 +550,10 @@
             </div>
             <div class="fb-item">
               <label>设备</label>
-              <select class="form-select" id="rt-device" onchange="renderRtTable()"></select>
+              <select class="form-select" id="rt-device" onchange="renderRtTable(); fetchRtValues();"></select>
             </div>
-            <button class="btn btn-outline-primary" onclick="renderRtTable()"><i class="bi bi-arrow-clockwise me-1"></i>刷新数值</button>
-            <span class="ms-auto text-muted small"><span class="led"></span>模拟实时采集中</span>
+            <button class="btn btn-outline-primary" onclick="fetchRtValues()"><i class="bi bi-arrow-clockwise me-1"></i>刷新数值</button>
+            <span class="ms-auto text-muted small"><span class="led led-on"></span><span id="rt-hint">等待采集…</span></span>
           </div>
         </div>
         <div id="rt-empty" class="empty-state mt-3"><i class="bi bi-activity"></i><div>请选择通道与设备以查看实时属性数值。</div></div>
@@ -559,7 +561,7 @@
           <div class="preview-label mb-2"><i class="bi bi-list-columns-reverse me-1"></i>设备属性数值预览</div>
           <div class="table-responsive">
             <table class="table table-hover align-middle">
-              <thead><tr><th>属性ID</th><th>名称</th><th>当前值</th><th>单位</th><th>读写</th><th style="width:240px">值设定</th></tr></thead>
+              <thead><tr><th>属性ID</th><th>名称</th><th>当前值</th><th>单位</th><th>读写</th><th style="width:240px">值设定</th><th style="width:90px">更新时间</th></tr></thead>
               <tbody id="rt-tbody"></tbody>
             </table>
           </div>
@@ -632,8 +634,6 @@
               <select class="form-select" id="pm-dataType" required>
                 <option value="">请选择</option>
                 <option value="bool">布尔</option>
-                <option value="bitmap">位图</option>
-                <option value="enum">枚举</option>
                 <option value="int">整数</option>
                 <option value="float">浮点数</option>
                 <option value="string">字符串</option>
@@ -650,12 +650,16 @@
               </select>
               <div class="invalid-feedback">请选择读写属性</div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold">数据长度</label>
-              <input type="text" class="form-control" id="pm-length" placeholder="[0,1) 表示一个位 [0,16) 表示 2 个字节">
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">数据长度（起始位）</label>
+              <input type="number" step="1" min="0" class="form-control" id="pm-startbit" placeholder="如 0" value="0">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">（终止位）</label>
+              <input type="number" step="1" min="0" class="form-control" id="pm-endbit" placeholder="如 15" value="15">
             </div>
             <div class="col-md-4">
-              <label class="form-label fw-semibold">数据基数</label>
+              <label class="form-label fw-semibold">偏移量</label>
               <input type="number" step="any" class="form-control" id="pm-base" placeholder="0">
             </div>
             <div class="col-md-4">
@@ -669,33 +673,50 @@
           </div>
 
           <div class="form-section-divider"><span><i class="bi bi-hdd-stack me-1"></i>协议映射（可选）</span></div>
+          <div class="alert alert-info py-2 mb-2 small">
+            <i class="bi bi-info-circle me-1"></i>
+            实际寄存器地址 = <strong>基址 + 偏移</strong>。相同<strong>基址 + 功能码</strong>的属性会自动合并为一次读请求。
+          </div>
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label fw-semibold">读功能码</label>
-              <input type="text" class="form-control" id="pm-readfunc" placeholder="（0x03）">
+              <select class="form-select" id="pm-readfunc">
+                <option value="">不读取</option>
+                <option value="1">0x01 读线圈</option>
+                <option value="2">0x02 读离散量输入</option>
+                <option value="3">0x03 读保持寄存器</option>
+                <option value="4">0x04 读输入寄存器</option>
+              </select>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">写功能码</label>
-              <input type="text" class="form-control" id="pm-writefunc" placeholder="（0x06）">
+              <select class="form-select" id="pm-writefunc">
+                <option value="">不可写</option>
+                <option value="5">0x05 写单线圈</option>
+                <option value="6">0x06 写单寄存器</option>
+                <option value="15">0x0F 写多线圈</option>
+                <option value="16">0x10 写多寄存器</option>
+              </select>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">字节顺序</label>
               <select class="form-select" id="pm-byteorder">
-                <option value="ab">ab</option>
-                <option value="ba">ba</option>
-                <option value="abcd">abcd</option>
-                <option value="cdab">cdab</option>
-                <option value="badc">badc</option>
-                <option value="dcba">dcba</option>
+                <option value="">自动</option>
+                <option value="ab">AB (单寄存器大端)</option>
+                <option value="ba">BA (单寄存器小端)</option>
+                <option value="abcd">ABCD (双寄存器大端)</option>
+                <option value="cdab">CDAB (字交换)</option>
+                <option value="badc">BADC (字节交换)</option>
+                <option value="dcba">DCBA (双寄存器小端)</option>
               </select>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">寄存器基址</label>
-              <input type="text" class="form-control" id="pm-regbase" placeholder="支持 10进制 或 0x16进制" onblur="normRegField('pm-regbase')">
+              <input type="number" step="1" class="form-control" id="pm-regbase" placeholder="如 0 或 40001" onblur="normRegField('pm-regbase')">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">寄存器偏移</label>
-              <input type="text" class="form-control" id="pm-regoffset" placeholder="支持 10进制 或 0x16进制" onblur="normRegField('pm-regoffset')">
+              <input type="number" step="1" class="form-control" id="pm-regoffset" placeholder="如 0 或 10" onblur="normRegField('pm-regoffset')">
             </div>
           </div>
         </form>

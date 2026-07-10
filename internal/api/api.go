@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"gateway/internal/engine"
 	"gateway/internal/store"
 
 	"gorm.io/gorm"
@@ -16,14 +17,18 @@ type Server struct {
 	HardwarePath string
 	// Engine 负责链路的运行与热重载；链路配置变更后回调其 Apply。
 	// 允许为 nil（例如未启用引擎的场景）。
-	Engine Reloader
+	Engine EngineFacade
 }
 
-// Reloader 抽象引擎的热重载能力，供链路增删改后触发。
-// 由 engine.Engine 实现，接口化以避免 api 直接依赖引擎内部细节。
-type Reloader interface {
-	// Apply 以给定链路集合为期望状态做差量启停。
-	Apply(channels []store.Channel)
+// EngineFacade 汇总引擎对 API 层暴露的全部能力，
+// 由 engine.Engine 实现。接口化以避免 api 直接依赖引擎内部细节。
+type EngineFacade interface {
+	// Apply 以给定采集计划集合为期望状态做差量启停。
+	Apply(plans []engine.ChannelPlan, models []store.DeviceModel)
+	// Submit 投递一条写命令。
+	Submit(channelID int, cmd engine.WriteCommand) bool
+	// Values 返回指定链路的实时值快照。
+	Values(channelID int) map[string]engine.SessionEntry
 }
 
 func New(db *gorm.DB, hardwarePath string) *Server {

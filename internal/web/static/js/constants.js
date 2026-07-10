@@ -6,7 +6,7 @@ const PROTOCOLS_BY_INTERFACE = {
   Network: ['Modbus TCP', 'Modbus RTU', 'IEC103', 'IEC104', 'IEC61850', 'OPC UA', 'MQTT', 'HTTP/HTTPS', '自定义协议'],
   CAN: ['CAN协议', '自定义协议']
 };
-const DT_LABEL = { bool:'布尔', bitmap:'位图', enum:'枚举', int:'整数', float:'浮点数', string:'字符串' };
+const DT_LABEL = { bool:'布尔', int:'整数', float:'浮点数', string:'字符串' };
 const DT_FROM_LABEL = Object.fromEntries(Object.entries(DT_LABEL).map(([k, v]) => [v, k]));
 const ACCESS_LABEL = { r:'只读', w:'只写', rw:'读写' };
 const ACCESS_FROM_LABEL = { '只读':'r', '只写':'w', '读写':'rw', 'R':'r', 'W':'w', 'RW':'rw', 'r':'r', 'w':'w', 'rw':'rw' };
@@ -19,16 +19,18 @@ const DEFAULT_HARDWARE = {
   CAN: { CAN1: 'can0', CAN2: 'can1' }
 };
 
-const CSV_HEADERS = ['属性ID','属性名称','属性描述','数据类型','数据长度','读写属性','数据基数','数据系数','数据单位','读功能码','写功能码','寄存器基址','寄存器偏移','字节顺序'];
+const CSV_HEADERS = ['属性ID','属性名称','属性描述','数据类型','起始位','终止位','读写属性','偏移量','数据系数','数据单位','读功能码','写功能码','寄存器基址','寄存器偏移','字节顺序'];
 const CSV_FIELD_MAP = {
   '属性ID':'id','id':'id',
   '属性名称':'name','名称':'name','name':'name',
   '属性描述':'description','描述':'description','description':'description',
   '数据类型':'dataType','datatype':'dataType',
-  '数据长度':'dataLength','datalength':'dataLength',
+  '起始位':'startBit','startbit':'startBit',
+  '终止位':'endBit','endbit':'endBit',
   '数据单位':'unit','单位':'unit','unit':'unit',
   '读写属性':'accessMode','读写':'accessMode','accessmode':'accessMode',
-  '数据基数':'base','基数':'base','base':'base',
+  '偏移量':'deltaValue','delta':'deltaValue','deltavalue':'deltaValue',
+  '数据基数':'deltaValue','基数':'deltaValue','base':'deltaValue',
   '数据系数':'coefficient','系数':'coefficient','coefficient':'coefficient',
   '读功能码':'readFunctionCode','readfunctioncode':'readFunctionCode',
   '写功能码':'writeFunctionCode','writefunctioncode':'writeFunctionCode',
@@ -44,7 +46,7 @@ const state = {
   channels: [],
   editingId: null,
   channel: null,
-  profile: { profileIndex:'', profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:'', interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 125 },
+  profile: { profileIndex:'', profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:'', interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 100 },
   properties: []
 };
 let currentStep = 1;

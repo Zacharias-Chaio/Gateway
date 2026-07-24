@@ -29,6 +29,8 @@ type EngineFacade interface {
 	Submit(channelID int, cmd engine.WriteCommand) bool
 	// Values 返回指定链路的实时值快照。
 	Values(channelID int) map[string]engine.SessionEntry
+	// CommunicationSnapshot returns communication packets and per-session statistics.
+	CommunicationSnapshot(channelID, deviceIndex int, afterSeq uint64, limit int) (engine.CommunicationSnapshot, bool)
 }
 
 func New(db *gorm.DB, hardwarePath string) *Server {

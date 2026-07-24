@@ -127,6 +127,19 @@ func (e *Engine) Values(channelID int) map[string]SessionEntry {
 	return w.getValues()
 }
 
+// CommunicationSnapshot returns the current communication-monitor session for
+// a device, or for every device when deviceIndex is -1. The boolean is false
+// when the channel has no active worker.
+func (e *Engine) CommunicationSnapshot(channelID, deviceIndex int, afterSeq uint64, limit int) (CommunicationSnapshot, bool) {
+	e.mu.Lock()
+	w, ok := e.workers[channelID]
+	e.mu.Unlock()
+	if !ok {
+		return CommunicationSnapshot{}, false
+	}
+	return w.monitor.snapshot(deviceIndex, afterSeq, limit), true
+}
+
 // Stop 停止所有链路并等待其 goroutine 退出。
 func (e *Engine) Stop() {
 	e.mu.Lock()

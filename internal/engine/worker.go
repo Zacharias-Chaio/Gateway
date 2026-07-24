@@ -53,6 +53,8 @@ type worker struct {
 	// session 值缓存：key = "deviceIndex/propName"
 	sess sync.RWMutex
 	data map[string]sessionEntry
+
+	monitor *commMonitor
 }
 
 // newWorker 构造 worker，此时尚未启动 goroutine。
@@ -68,6 +70,7 @@ func newWorker(id int, name, fp string, cfg connector.Config, drv connector.Driv
 		done:    make(chan struct{}),
 		writeCh: make(chan WriteCommand, 32),
 		data:    make(map[string]sessionEntry),
+		monitor: newCommMonitor(id, defaultCommEventCapacity),
 	}
 }
 
@@ -154,6 +157,7 @@ func (w *worker) run(ctx context.Context) {
 		// 连接成功，重置计数
 		connectAttempts = 0
 		w.setConnected(true, "")
+		w.monitor.reset(time.Now())
 		w.log.Info("链路已连接，开始采集",
 			"channel", w.name, "type", w.cfg.Type, "target", w.cfg.Target(),
 			"devices", len(w.plan.Devices), "pollInterval", w.pollDuration().String())
@@ -254,6 +258,8 @@ func (w *worker) pollDevice(ctx context.Context, dev *DevicePlan) error {
 // resendRetries 控制单帧发送失败后的重试次数（0 = 不重试，发一次即返回错误）。
 func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 	g := dev.Groups[gi]
+	deviceIndex := devIndexByName(w.plan, dev)
+	transactionStarted := time.Now()
 
 	// 组装读请求
 	req, tid, err := dev.Conv.EncodeRead(dev.UnitID, g.ReadFC, g.StartAddr, g.Quantity)
@@ -271,7 +277,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 		}
 
 		// 发送
-		w.logTX(dev, req)
+		w.logTX(dev, "read", attempt, req)
 		if _, err := w.drv.Send(req); err != nil {
 			lastErr = err
 			w.log.Debug("读请求发送失败",
@@ -286,11 +292,12 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 		}
 
 		// 读取响应（渐进式帧读取）
-		raw, err := w.readFrame(ctx, dev, byte(g.ReadFC), g.Quantity, tid)
+		raw, err := w.readFrame(ctx, dev, byte(g.ReadFC), g.Quantity, tid, "read", attempt, time.Now())
 		if err != nil {
 			lastErr = err
 			// 链路层错误（连接断开）无需重发，直接返回触发重连
 			if isLinkError(err) {
+				w.monitor.complete(deviceIndex, dev.UnitID, "read", attempt, err, time.Since(transactionStarted))
 				return err
 			}
 			w.log.Debug("读响应解析失败",
@@ -309,7 +316,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 			if err != nil {
 				continue
 			}
-			key := cacheKey(devIndexByName(w.plan, dev), m.Prop.Name)
+			key := cacheKey(deviceIndex, m.Prop.Name)
 			w.sess.Lock()
 			w.data[key] = sessionEntry{Value: val, Timestamp: time.Now()}
 			w.sess.Unlock()
@@ -318,22 +325,26 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 				"channel", w.name, "device", dev.ModelName,
 				"prop", m.Prop.Name, "value", val)
 		}
+		w.monitor.complete(deviceIndex, dev.UnitID, "read", attempt, nil, time.Since(transactionStarted))
 		return nil
 	}
 
 	// 所有重发均失败
 	if lastErr != nil {
+		w.monitor.complete(deviceIndex, dev.UnitID, "read", maxAttempts, lastErr, time.Since(transactionStarted))
 		w.log.Warn("读请求重发耗尽",
 			"channel", w.name, "device", dev.ModelName,
 			"attempts", maxAttempts, "lastErr", lastErr)
 		return lastErr
 	}
-	return errors.New("读请求失败")
+	err = errors.New("读请求失败")
+	w.monitor.complete(deviceIndex, dev.UnitID, "read", maxAttempts, err, time.Since(transactionStarted))
+	return err
 }
 
 // readFrame 渐进式读取一帧响应。
 // RTU 按固定长度读，TCP 先读 MBAP 头再按 length 字段读完整帧。
-func (w *worker) readFrame(ctx context.Context, dev *DevicePlan, fc byte, quantity int, tid uint16) ([]byte, error) {
+func (w *worker) readFrame(ctx context.Context, dev *DevicePlan, fc byte, quantity int, tid uint16, operation string, attempt int, sentAt time.Time) ([]byte, error) {
 	const (
 		readTimeout  = 1500 * time.Millisecond // 单次 Receive 超时
 		maxWaitTotal = 3000 * time.Millisecond // 整帧最大等待时间
@@ -361,7 +372,7 @@ func (w *worker) readFrame(ctx context.Context, dev *DevicePlan, fc byte, quanti
 		// 尝试解码
 		data, err := dev.Conv.DecodeRead(buf, tid, dev.UnitID, fc, quantity)
 		if err == nil {
-			w.logRX(dev, buf)
+			w.logRX(dev, operation, attempt, buf, time.Since(sentAt))
 			return data, nil
 		}
 		if !converter.IsShortFrame(err) {
@@ -380,6 +391,7 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 		return errors.New("设备序号越界")
 	}
 	dev := &w.plan.Devices[cmd.DeviceIndex]
+	transactionStarted := time.Now()
 
 	// 查找属性
 	prop, err := converter.FindWriteProp(dev.Props, cmd.PropName)
@@ -416,7 +428,7 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 		}
 
 		// 发送
-		w.logTX(dev, frame)
+		w.logTX(dev, "write", attempt, frame)
 		if _, err := w.drv.Send(frame); err != nil {
 			lastErr = err
 			continue
@@ -424,6 +436,7 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 		if w.cfg.FrameInterval > 0 {
 			time.Sleep(time.Duration(w.cfg.FrameInterval) * time.Millisecond)
 		}
+		sentAt := time.Now()
 
 		// 读响应（渐进式）
 		buf := make([]byte, 0, 32)
@@ -449,7 +462,8 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 			err = dev.Conv.DecodeWrite(buf, tid, dev.UnitID, byte(prop.WriteFC),
 				prop.RegisterBase+prop.Offset, prop.RegCount())
 			if err == nil {
-				w.logRX(dev, buf)
+				w.logRX(dev, "write", attempt, buf, time.Since(sentAt))
+				w.monitor.complete(cmd.DeviceIndex, dev.UnitID, "write", attempt, nil, time.Since(transactionStarted))
 				return nil
 			}
 			if !converter.IsShortFrame(err) {
@@ -463,9 +477,12 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 		}
 	}
 	if lastErr != nil {
+		w.monitor.complete(cmd.DeviceIndex, dev.UnitID, "write", maxAttempts, lastErr, time.Since(transactionStarted))
 		return lastErr
 	}
-	return errors.New("写命令失败")
+	err = errors.New("写命令失败")
+	w.monitor.complete(cmd.DeviceIndex, dev.UnitID, "write", maxAttempts, err, time.Since(transactionStarted))
+	return err
 }
 
 func (w *worker) setConnected(v bool, errMsg string) {
@@ -498,14 +515,16 @@ func cacheKey(devIdx int, propName string) string {
 }
 
 // logTX 记录发送报文（Debug 级），便于通信排障。
-func (w *worker) logTX(dev *DevicePlan, p []byte) {
+func (w *worker) logTX(dev *DevicePlan, operation string, attempt int, p []byte) {
+	w.monitor.tx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p)
 	w.log.Debug("TX 发送报文",
 		"channel", w.name, "device", dev.ModelName,
 		"hex", fmt.Sprintf("% x", p), "len", len(p))
 }
 
 // logRX 记录接收报文（Debug 级），便于通信排障。
-func (w *worker) logRX(dev *DevicePlan, p []byte) {
+func (w *worker) logRX(dev *DevicePlan, operation string, attempt int, p []byte, latency time.Duration) {
+	w.monitor.rx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p, latency)
 	w.log.Debug("RX 接收报文",
 		"channel", w.name, "device", dev.ModelName,
 		"hex", fmt.Sprintf("% x", p), "len", len(p))

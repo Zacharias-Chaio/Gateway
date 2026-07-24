@@ -29,6 +29,6 @@ function switchSection(key) {
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   document.getElementById('nav-' + key).classList.add('active');
   if (key === 'realtime') renderRealtime(); else rtStopPolling();
-  if (key === 'log') renderLogSelectors();
+  if (key === 'log') renderLogSelectors(); else logStopPolling();
 }
 

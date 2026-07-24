@@ -61,6 +61,7 @@ func Router(db *gorm.DB, hardwarePath string, eng *engine.Engine) http.Handler {
 		r.Get("/realtime", s.Realtime)
 		r.Post("/set", s.SetValue)
 		r.Get("/logs", s.Logs)
+		r.Get("/comm-monitor", s.CommunicationMonitor)
 
 		r.Get("/hardware", s.GetHardware)
 

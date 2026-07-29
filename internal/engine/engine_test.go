@@ -8,6 +8,7 @@ import (
 	"gorm.io/datatypes"
 
 	"gateway/internal/engine/connector"
+	"gateway/internal/engine/converter"
 	"gateway/internal/store"
 )
 
@@ -124,5 +125,40 @@ func TestEngineUnsupportedSkipped(t *testing.T) {
 		return len(st) == 1 && !st[0].Connected && st[0].LastError != ""
 	}) {
 		t.Fatalf("CAN 链路状态不符合预期: %+v", eng.Status())
+	}
+}
+
+func TestEngineStopInterruptsBlockedReceive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, err := startSilentServer(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("启动 TCP 测试服务失败: %v", err)
+	}
+	defer srv.close()
+	host, port, ok := splitHostPort(srv.addr())
+	if !ok {
+		t.Fatalf("解析地址失败: %s", srv.addr())
+	}
+
+	eng := New(ctx)
+	plan := toPlan(networkChannel(1, "链路A", host, port))
+	plan.Devices = []DevicePlan{{
+		UnitID: 1, ModelName: "设备A", Conv: blockingFrameIO{},
+		Groups: []converter.RegGroup{{ReadFC: 3, StartAddr: 0, Quantity: 1}},
+	}}
+	eng.Apply([]ChannelPlan{plan}, nil)
+	if !waitFor(t, time.Second, func() bool {
+		status := eng.Status()
+		return len(status) == 1 && status[0].Connected
+	}) {
+		t.Fatalf("链路未在预期时间内连接: %+v", eng.Status())
+	}
+
+	started := time.Now()
+	eng.Stop()
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Stop 等待阻塞读取过久: %s", elapsed)
 	}
 }

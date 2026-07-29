@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -57,6 +58,26 @@ func TestTCPDriverRoundTrip(t *testing.T) {
 
 type tcpEchoServer struct{ ln net.Listener }
 
+type blockingFrameIO struct{}
+
+func (blockingFrameIO) Protocol() string { return "test" }
+
+func (blockingFrameIO) EncodeRead(byte, int, int, int) ([]byte, uint16, error) {
+	return []byte{1}, 0, nil
+}
+
+func (blockingFrameIO) DecodeRead([]byte, uint16, byte, byte, int) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (blockingFrameIO) EncodeWrite(byte, []byte) ([]byte, uint16, error) {
+	return nil, 0, errors.New("not used")
+}
+
+func (blockingFrameIO) DecodeWrite([]byte, uint16, byte, byte, int, int) error {
+	return errors.New("not used")
+}
+
 func startEchoServer(ctx context.Context, addr string) (*tcpEchoServer, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -68,6 +89,31 @@ func startEchoServer(ctx context.Context, addr string) (*tcpEchoServer, error) {
 		s.close()
 	}()
 	go s.accept()
+	return s, nil
+}
+
+func startSilentServer(ctx context.Context, addr string) (*tcpEchoServer, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	s := &tcpEchoServer{ln: ln}
+	go func() {
+		<-ctx.Done()
+		s.close()
+	}()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_, _ = io.Copy(io.Discard, conn)
+			}()
+		}
+	}()
 	return s, nil
 }
 

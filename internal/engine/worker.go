@@ -81,10 +81,13 @@ func (w *worker) start(parent context.Context) {
 	go w.run(ctx)
 }
 
-// stop 请求停止并等待 goroutine 退出（阻塞直到 Close 完成）。
+// stop 请求停止并等待 goroutine 退出。关闭底层连接以立即唤醒阻塞的 Receive。
 func (w *worker) stop() {
 	if w.cancel != nil {
 		w.cancel()
+	}
+	if err := w.drv.Close(); err != nil {
+		w.log.Warn("停止链路时关闭连接失败", "channel", w.name, "err", err)
 	}
 	<-w.done
 }
@@ -247,8 +250,8 @@ func (w *worker) pollDevice(ctx context.Context, dev *DevicePlan) error {
 		if err := w.pollOne(ctx, dev, gi); err != nil {
 			return err
 		}
-		if w.cfg.FrameInterval > 0 {
-			time.Sleep(time.Duration(w.cfg.FrameInterval) * time.Millisecond)
+		if !sleepCtx(ctx, frameInterval(w.cfg.FrameInterval)) {
+			return ctx.Err()
 		}
 	}
 	return nil
@@ -287,8 +290,8 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 		}
 
 		// 帧间隔（半双工总线发送后需等待响应）
-		if w.cfg.FrameInterval > 0 {
-			time.Sleep(time.Duration(w.cfg.FrameInterval) * time.Millisecond)
+		if !sleepCtx(ctx, frameInterval(w.cfg.FrameInterval)) {
+			return ctx.Err()
 		}
 
 		// 读取响应（渐进式帧读取）
@@ -433,8 +436,8 @@ func (w *worker) execWrite(ctx context.Context, cmd WriteCommand) error {
 			lastErr = err
 			continue
 		}
-		if w.cfg.FrameInterval > 0 {
-			time.Sleep(time.Duration(w.cfg.FrameInterval) * time.Millisecond)
+		if !sleepCtx(ctx, frameInterval(w.cfg.FrameInterval)) {
+			return ctx.Err()
 		}
 		sentAt := time.Now()
 
@@ -631,4 +634,11 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	case <-t.C:
 		return true
 	}
+}
+
+func frameInterval(milliseconds int) time.Duration {
+	if milliseconds <= 0 {
+		return 0
+	}
+	return time.Duration(milliseconds) * time.Millisecond
 }

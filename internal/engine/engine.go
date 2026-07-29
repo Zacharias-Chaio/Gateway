@@ -22,6 +22,7 @@ type Engine struct {
 	log *slog.Logger
 
 	mu      sync.Mutex
+	applyMu sync.Mutex      // 串行化调谐，避免新旧 worker 在重启期间重叠运行
 	workers map[int]*worker // key: channel ID
 }
 
@@ -44,31 +45,42 @@ func New(ctx context.Context) *Engine {
 //
 // 可重复调用，用于配置保存 / 删除后的热重载。
 func (e *Engine) Apply(plans []ChannelPlan, _ []store.DeviceModel) {
+	e.applyMu.Lock()
+	defer e.applyMu.Unlock()
+
 	desired := make(map[int]ChannelPlan, len(plans))
 	for _, p := range plans {
 		desired[p.ChannelID] = p
 	}
 
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	toStop := make([]*worker, 0)
 
-	// 停止不再期望存在，或配置已变化的 worker。
+	// 从活动表移除不再期望存在、或配置已变化的 worker。等待退出必须在锁外，
+	// 以免阻塞状态查询与写命令投递。
 	for id, w := range e.workers {
 		p, keep := desired[id]
 		if !keep {
 			e.log.Info("停止链路（已删除）", "channel", w.name, "id", id)
-			w.stop()
+			toStop = append(toStop, w)
 			delete(e.workers, id)
 			continue
 		}
 		if planFingerprint(p) != w.fp {
 			e.log.Info("重启链路（配置变更）", "channel", w.name, "id", id)
-			w.stop()
+			toStop = append(toStop, w)
 			delete(e.workers, id)
 		}
 	}
+	e.mu.Unlock()
+
+	for _, w := range toStop {
+		w.stop()
+	}
 
 	// 启动新增的、或刚因变更被移除的 worker。
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	for id, p := range desired {
 		if _, running := e.workers[id]; running {
 			continue
@@ -142,11 +154,18 @@ func (e *Engine) CommunicationSnapshot(channelID, deviceIndex int, afterSeq uint
 
 // Stop 停止所有链路并等待其 goroutine 退出。
 func (e *Engine) Stop() {
+	e.applyMu.Lock()
+	defer e.applyMu.Unlock()
+
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	workers := make([]*worker, 0, len(e.workers))
 	for id, w := range e.workers {
-		w.stop()
+		workers = append(workers, w)
 		delete(e.workers, id)
+	}
+	e.mu.Unlock()
+	for _, w := range workers {
+		w.stop()
 	}
 	e.log.Info("引擎已停止，所有链路关闭")
 }

@@ -87,7 +87,7 @@ function renderChannelDeviceTable() {
   tbody.innerHTML = devices.map((d, i) => `
     <tr>
       <td><span class="ch-device-idx">${i}</span></td>
-      <td><input type="number" min="1" step="1" class="form-control form-control-sm ch-comm-input" value="${escapeHtml(d.commNo ?? '')}" oninput="onCommNoInput()"></td>
+      <td><input type="number" min="1" max="247" step="1" class="form-control form-control-sm ch-comm-input" value="${escapeHtml(d.commNo ?? '')}" oninput="onCommNoInput()"></td>
       <td><select class="form-select form-select-sm" oninput="onCommNoInput()">${chDeviceModelOptions(d.modelId)}</select></td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="chRemoveDevice(${i})" title="移除"><i class="bi bi-trash"></i></button></td>
     </tr>`).join('');
@@ -118,7 +118,7 @@ function validateChannelDevices(report = true) {
     selEl.classList.remove('is-invalid');
     const v = commEl.value.trim();
     const n = Number(v);
-    if (v === '' || !Number.isInteger(n) || n < 1) { commEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || commEl; }
+    if (v === '' || !Number.isInteger(n) || n < 1 || n > 247) { commEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || commEl; }
     if (!selEl.value) { selEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || selEl; }
   });
   rows.forEach(tr => {
@@ -130,7 +130,7 @@ function validateChannelDevices(report = true) {
   });
   if (!ok && report) {
     if (firstBad) firstBad.focus();
-    alert('请检查设备配置：通讯号需为不小于 1 的整数、同一链路内不可重复，且每行需选择设备模板。');
+    alert('请检查设备配置：通讯号需为 1 到 247 的整数、同一链路内不可重复，且每行需选择设备模板。');
   }
   return ok;
 }

@@ -90,10 +90,11 @@ func MapRegisters(raw []byte, prop PropMeta) (any, error) {
 
 // extractBit 从字节切片中提取指定位（bit 0 = 最低位）。
 func extractBit(raw []byte, bit int) bool {
-	byteIdx := bit / 8
-	if byteIdx >= len(raw) {
+	if bit < 0 || bit >= len(raw)*8 {
 		return false
 	}
+	// Modbus 寄存器按大端传输，bit 0 是整个寄存器值的最低位。
+	byteIdx := len(raw) - 1 - bit/8
 	return raw[byteIdx]&(1<<(bit%8)) != 0
 }
 

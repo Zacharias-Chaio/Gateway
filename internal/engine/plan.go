@@ -121,6 +121,10 @@ func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (
 
 // buildDevicePlan 从设备模型构建单个设备的采集计划。
 func buildDevicePlan(model store.DeviceModel, commNo int) (*DevicePlan, error) {
+	if commNo < 1 || commNo > 247 {
+		return nil, fmt.Errorf("模型 %q 的 Modbus 通讯号必须介于 1 和 247", model.Name)
+	}
+
 	// 解析协议信息与最大寄存器数。
 	var profile struct {
 		ProtocolType     string `json:"protocolType"`

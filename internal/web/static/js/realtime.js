@@ -11,7 +11,7 @@ function channelDevices(ch) {
   if (!ch) return [];
   return (ch.devices || []).map((d, i) => {
     const m = state.models.find(x => String(x.id) === String(d.modelId));
-    return m ? { index: i, commNo: d.commNo, model: m } : null;
+    return m ? { index: i, commNo: d.commNo, name: d.name || '', model: m } : null;
   }).filter(Boolean);
 }
 
@@ -61,7 +61,7 @@ function renderRealtime() {
 function onRtChannelChange() {
   const ch = state.channels.find(c => String(c.id) === document.getElementById('rt-channel').value);
   fillSelect(document.getElementById('rt-device'), channelDevices(ch),
-    d => d.index, d => `#${d.commNo} · ${(d.model.profile && d.model.profile.name) || '未命名设备'}`, true);
+    d => d.index, d => `#${d.commNo} · ${d.name || (d.model.profile && d.model.profile.name) || '未命名设备'}`, true);
   rtValues = {};
   renderRtTable();
   fetchRtValues();

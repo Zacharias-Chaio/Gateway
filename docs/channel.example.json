@@ -16,6 +16,7 @@
       {
         "index": 0,
         "commNo": 1,
+        "name": "1#进线柜电表",
         "modelId": "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab",
         "modelName": "三相电力仪表"
       }
@@ -25,6 +26,7 @@
     {
       "index": 0,
       "commNo": 1,
+      "name": "1#进线柜电表",
       "modelId": "a1b2c3d4-e5f6-4a7b-8c9d-0123456789ab",
       "modelName": "三相电力仪表"
     }

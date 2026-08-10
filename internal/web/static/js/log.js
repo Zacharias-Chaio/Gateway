@@ -12,9 +12,9 @@ function renderLogSelectors() {
 
 function onLogChannelChange() {
   const ch = state.channels.find(c => String(c.id) === document.getElementById('log-channel').value);
-  const devices = [{ index: -1, commNo: '', model: null }].concat(channelDevices(ch));
+  const devices = [{ index: -1, commNo: '', name: '', model: null }].concat(channelDevices(ch));
   fillSelect(document.getElementById('log-device'), devices,
-    d => d.index, d => d.index < 0 ? '全部设备' : `#${d.commNo} · ${(d.model.profile && d.model.profile.name) || '未命名设备'}`, false);
+    d => d.index, d => d.index < 0 ? '全部设备' : `#${d.commNo} · ${d.name || (d.model.profile && d.model.profile.name) || '未命名设备'}`, false);
   resetCommLog();
 }
 

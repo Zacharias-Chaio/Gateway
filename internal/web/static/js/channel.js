@@ -45,7 +45,7 @@ function hwKey(category, node) {
 function normalizeChannelDevices(c) {
   if (!c) return;
   if (!Array.isArray(c.devices)) {
-    c.devices = Array.isArray(c.modelIds) ? c.modelIds.map((id, i) => ({ commNo: i + 1, modelId: id })) : [];
+    c.devices = Array.isArray(c.modelIds) ? c.modelIds.map((id, i) => ({ commNo: i + 1, name: '', modelId: id })) : [];
   }
   delete c.modelIds;
 }
@@ -63,9 +63,10 @@ function chDeviceModelOptions(selectedId) {
 function readChannelDeviceRows() {
   return Array.from(document.querySelectorAll('#ch-device-rows tr')).map(tr => {
     const commEl = tr.querySelector('.ch-comm-input');
+    const nameEl = tr.querySelector('.ch-name-input');
     const selEl = tr.querySelector('select');
     const raw = commEl ? commEl.value.trim() : '';
-    return { commNo: raw === '' ? '' : Number(raw), modelId: selEl ? selEl.value : '' };
+    return { commNo: raw === '' ? '' : Number(raw), name: nameEl ? nameEl.value.trim() : '', modelId: selEl ? selEl.value : '' };
   });
 }
 function renderChannelDeviceTable() {
@@ -88,6 +89,7 @@ function renderChannelDeviceTable() {
     <tr>
       <td><span class="ch-device-idx">${i}</span></td>
       <td><input type="number" min="1" max="247" step="1" class="form-control form-control-sm ch-comm-input" value="${escapeHtml(d.commNo ?? '')}" oninput="onCommNoInput()"></td>
+      <td><input type="text" maxlength="64" placeholder="请输入设备名称" class="form-control form-control-sm ch-name-input" value="${escapeHtml(d.name ?? '')}"></td>
       <td><select class="form-select form-select-sm" oninput="onCommNoInput()">${chDeviceModelOptions(d.modelId)}</select></td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="chRemoveDevice(${i})" title="移除"><i class="bi bi-trash"></i></button></td>
     </tr>`).join('');
@@ -97,7 +99,7 @@ function chAddDevice() {
   if (!state.channel) return;
   if (!state.models.length) { alert('暂无设备模型，请先在「设备模型」中创建。'); return; }
   state.channel.devices = readChannelDeviceRows();
-  state.channel.devices.push({ commNo: nextCommNo(state.channel.devices), modelId: state.models[0].id });
+  state.channel.devices.push({ commNo: nextCommNo(state.channel.devices), name: '', modelId: state.models[0].id });
   renderChannelDeviceTable();
 }
 function chRemoveDevice(i) {
@@ -113,12 +115,15 @@ function validateChannelDevices(report = true) {
   const seen = {};
   rows.forEach(tr => {
     const commEl = tr.querySelector('.ch-comm-input');
+    const nameEl = tr.querySelector('.ch-name-input');
     const selEl = tr.querySelector('select');
     commEl.classList.remove('is-invalid');
+    nameEl.classList.remove('is-invalid');
     selEl.classList.remove('is-invalid');
     const v = commEl.value.trim();
     const n = Number(v);
     if (v === '' || !Number.isInteger(n) || n < 1 || n > 247) { commEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || commEl; }
+    if (!nameEl.value.trim()) { nameEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || nameEl; }
     if (!selEl.value) { selEl.classList.add('is-invalid'); ok = false; firstBad = firstBad || selEl; }
   });
   rows.forEach(tr => {
@@ -130,7 +135,7 @@ function validateChannelDevices(report = true) {
   });
   if (!ok && report) {
     if (firstBad) firstBad.focus();
-    alert('请检查设备配置：通讯号需为 1 到 247 的整数、同一链路内不可重复，且每行需选择设备模板。');
+    alert('请检查设备配置：设备名称必填、通讯号需为 1 到 247 的整数、同一链路内不可重复，且每行需选择设备模板。');
   }
   return ok;
 }
@@ -276,7 +281,7 @@ function saveChannel() {
 function buildChannelConfig(c) {
   const devices = (c.devices || []).map((d, i) => {
     const m = state.models.find(x => String(x.id) === String(d.modelId));
-    return { index: i, commNo: toNum(d.commNo, null), modelId: d.modelId || null, modelName: (m && m.profile && m.profile.name) || null };
+    return { index: i, commNo: toNum(d.commNo, null), name: d.name || '', modelId: d.modelId || null, modelName: (m && m.profile && m.profile.name) || null };
   });
   const base = { id: c.id, name: c.name, type: c.type,
     reconnectRetries: toNum(c.reconnectRetries, null), resendRetries: toNum(c.resendRetries, null), pollInterval: toNum(c.pollInterval, null),
@@ -312,7 +317,7 @@ function renderChannelList() {
     const tags = channelConfigTags(c).filter(Boolean).map(t => `<span class="mc-tag">${escapeHtml(t)}</span>`).join('');
     const devices = c.devices || [];
     const mounted = devices.length
-      ? devices.map(d => { const m = state.models.find(x => String(x.id) === String(d.modelId)); const nm = (m && m.profile && m.profile.name) || '未知模板'; return `<span class="mc-tag iface">#${escapeHtml(String(d.commNo))} · ${escapeHtml(nm)}</span>`; }).join('')
+      ? devices.map(d => { const m = state.models.find(x => String(x.id) === String(d.modelId)); const nm = (m && m.profile && m.profile.name) || '未知模板'; return `<span class="mc-tag iface">#${escapeHtml(String(d.commNo))} · ${escapeHtml(d.name || nm)}</span>`; }).join('')
       : '<span class="text-muted small">未挂载设备</span>';
     return `
       <div class="col-md-6 col-xl-4">

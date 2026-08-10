@@ -211,7 +211,7 @@ func (w *worker) collectLoop(ctx context.Context) bool {
 		if len(w.plan.Devices) > 0 {
 			dev := &w.plan.Devices[devIdx%len(w.plan.Devices)]
 			if err := w.pollDevice(ctx, dev); err != nil {
-				w.log.Warn("设备轮询失败", "channel", w.name, "device", dev.ModelName, "err", err)
+				w.log.Warn("设备轮询失败", "channel", w.name, "device", dev.DisplayName(), "err", err)
 				w.setOnline(devIndexByName(w.plan, dev), false)
 				if isLinkError(err) {
 					return true
@@ -284,7 +284,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 		if _, err := w.drv.Send(req); err != nil {
 			lastErr = err
 			w.log.Debug("读请求发送失败",
-				"channel", w.name, "device", dev.ModelName,
+				"channel", w.name, "device", dev.DisplayName(),
 				"attempt", attempt, "err", err)
 			continue
 		}
@@ -304,7 +304,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 				return err
 			}
 			w.log.Debug("读响应解析失败",
-				"channel", w.name, "device", dev.ModelName,
+				"channel", w.name, "device", dev.DisplayName(),
 				"attempt", attempt, "err", err)
 			continue
 		}
@@ -325,7 +325,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 			w.sess.Unlock()
 
 			w.log.Debug("采集成功",
-				"channel", w.name, "device", dev.ModelName,
+				"channel", w.name, "device", dev.DisplayName(),
 				"prop", m.Prop.Name, "value", val)
 		}
 		w.monitor.complete(deviceIndex, dev.UnitID, "read", attempt, nil, time.Since(transactionStarted))
@@ -336,7 +336,7 @@ func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 	if lastErr != nil {
 		w.monitor.complete(deviceIndex, dev.UnitID, "read", maxAttempts, lastErr, time.Since(transactionStarted))
 		w.log.Warn("读请求重发耗尽",
-			"channel", w.name, "device", dev.ModelName,
+			"channel", w.name, "device", dev.DisplayName(),
 			"attempts", maxAttempts, "lastErr", lastErr)
 		return lastErr
 	}
@@ -521,7 +521,7 @@ func cacheKey(devIdx int, propName string) string {
 func (w *worker) logTX(dev *DevicePlan, operation string, attempt int, p []byte) {
 	w.monitor.tx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p)
 	w.log.Debug("TX 发送报文",
-		"channel", w.name, "device", dev.ModelName,
+		"channel", w.name, "device", dev.DisplayName(),
 		"hex", fmt.Sprintf("% x", p), "len", len(p))
 }
 
@@ -529,7 +529,7 @@ func (w *worker) logTX(dev *DevicePlan, operation string, attempt int, p []byte)
 func (w *worker) logRX(dev *DevicePlan, operation string, attempt int, p []byte, latency time.Duration) {
 	w.monitor.rx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p, latency)
 	w.log.Debug("RX 接收报文",
-		"channel", w.name, "device", dev.ModelName,
+		"channel", w.name, "device", dev.DisplayName(),
 		"hex", fmt.Sprintf("% x", p), "len", len(p))
 }
 

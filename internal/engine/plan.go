@@ -27,17 +27,27 @@ import (
 type DeviceMount struct {
 	Index   int    `json:"index"`   // 设备序号
 	CommNo  int    `json:"commNo"`  // 从站地址 / 单元 ID
+	Name    string `json:"name"`    // 设备名称（用户填写）
 	ModelID string `json:"modelId"` // 对应 DeviceModel.ID
 }
 
 // DevicePlan 是一个设备的采集执行计划。
 type DevicePlan struct {
 	UnitID    byte                 // 从站地址
-	ModelName string               // 设备名称（日志用）
+	Name      string               // 设备名称（用户填写，日志/展示用）
+	ModelName string               // 模型名称（日志用）
 	Protocol  string               // 协议类型（"Modbus RTU" / "Modbus TCP"）
 	Conv      converter.FrameIO    // 协议转换器
 	Groups    []converter.RegGroup // 寄存器分组
 	Props     []converter.PropMeta // 完整属性表（写操作查找用）
+}
+
+// DisplayName 返回用于日志/展示的设备名称：优先用户填写的设备名，否则退回模型名。
+func (d *DevicePlan) DisplayName() string {
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.ModelName
 }
 
 // ChannelPlan 是一条链路的完整采集计划。
@@ -110,6 +120,7 @@ func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (
 			warns = append(warns, fmt.Sprintf("链路 %q 设备 %d (%s): %v", ch.Name, mt.Index, model.Name, err))
 			continue
 		}
+		dp.Name = mt.Name
 		plan.Devices = append(plan.Devices, *dp)
 	}
 

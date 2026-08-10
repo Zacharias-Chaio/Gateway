@@ -181,6 +181,7 @@
 |------|------|------|
 | `index` | `int` | 在链路内的序号（从 0 起） |
 | `commNo` | `int` | 通信地址 / 从站号（Modbus Unit ID） |
+| `name` | `string` | 设备名称（用户填写，展示/日志用） |
 | `modelId` | `string` | 引用的设备模型 ID |
 | `modelName` | `string` | 模型名称（冗余，仅展示用） |
 

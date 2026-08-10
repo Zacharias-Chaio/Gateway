@@ -204,7 +204,7 @@ func planFingerprint(p ChannelPlan) string {
 		h.Write([]byte(dev.Protocol))
 		h.Write([]byte{0})
 		h.Write([]byte{dev.UnitID})
-		h.Write([]byte(dev.ModelName))
+		h.Write([]byte(dev.DisplayName()))
 		h.Write([]byte{0})
 
 		// 分组指纹：功能码 + 起始地址 + 数量

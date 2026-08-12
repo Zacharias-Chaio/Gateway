@@ -24,6 +24,7 @@ type Engine struct {
 	mu      sync.Mutex
 	applyMu sync.Mutex      // 串行化调谐，避免新旧 worker 在重启期间重叠运行
 	workers map[int]*worker // key: channel ID
+	sink    EventSink
 }
 
 // New 创建 Engine。ctx 作为所有 worker 的父上下文，取消即触发全部链路关闭。
@@ -36,6 +37,14 @@ func New(ctx context.Context) *Engine {
 		log:     logx.Module("engine"),
 		workers: make(map[int]*worker),
 	}
+}
+
+// SetEventSink 设置采集与写入事件的非阻塞接收方。
+// 应在 Apply 启动 worker 前调用。
+func (e *Engine) SetEventSink(sink EventSink) {
+	e.mu.Lock()
+	e.sink = sink
+	e.mu.Unlock()
 }
 
 // Apply 以目标 plans 为期望状态，对运行中的 worker 做差量调谐：
@@ -102,7 +111,7 @@ func (e *Engine) startChannel(p ChannelPlan) {
 		e.log.Warn("链路驱动创建失败，跳过", "channel", p.ChannelName, "id", p.ChannelID, "type", p.ChannelType, "err", err)
 		return
 	}
-	w := newWorker(p.ChannelID, p.ChannelName, planFingerprint(p), cfg, drv, p)
+	w := newWorker(p.ChannelID, p.ChannelName, planFingerprint(p), cfg, drv, p, e.sink)
 	w.start(e.ctx)
 	e.workers[p.ChannelID] = w
 	e.log.Info("启动链路", "channel", p.ChannelName, "id", p.ChannelID, "type", p.ChannelType,
@@ -119,6 +128,22 @@ func (e *Engine) Submit(channelID int, cmd WriteCommand) bool {
 		return false
 	}
 	return w.tryWrite(cmd)
+}
+
+// HasDevice reports whether an active channel has the requested mounted device.
+func (e *Engine) HasDevice(channelID, deviceIndex int) bool {
+	e.mu.Lock()
+	w, ok := e.workers[channelID]
+	e.mu.Unlock()
+	return ok && deviceIndex >= 0 && deviceIndex < len(w.plan.Devices)
+}
+
+// Connected reports whether an active channel is currently connected.
+func (e *Engine) Connected(channelID int) bool {
+	e.mu.Lock()
+	w, ok := e.workers[channelID]
+	e.mu.Unlock()
+	return ok && w.state().Connected
 }
 
 // SessionEntry 是单个属性的实时值缓存条目（API 可见）。

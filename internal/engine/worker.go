@@ -55,10 +55,11 @@ type worker struct {
 	data map[string]sessionEntry
 
 	monitor *commMonitor
+	sink    EventSink
 }
 
 // newWorker 构造 worker，此时尚未启动 goroutine。
-func newWorker(id int, name, fp string, cfg connector.Config, drv connector.Driver, plan ChannelPlan) *worker {
+func newWorker(id int, name, fp string, cfg connector.Config, drv connector.Driver, plan ChannelPlan, sink EventSink) *worker {
 	return &worker{
 		id:      id,
 		name:    name,
@@ -71,6 +72,7 @@ func newWorker(id int, name, fp string, cfg connector.Config, drv connector.Driv
 		writeCh: make(chan WriteCommand, 32),
 		data:    make(map[string]sessionEntry),
 		monitor: newCommMonitor(id, defaultCommEventCapacity),
+		sink:    sink,
 	}
 }
 
@@ -114,6 +116,68 @@ func (w *worker) getValues() map[string]SessionEntry {
 	return out
 }
 
+// publishTelemetry 构造当前设备的一轮遥测快照，交给外部数据出口。
+func (w *worker) publishTelemetry(deviceIndex int, online bool) {
+	if w.sink == nil || deviceIndex < 0 || deviceIndex >= len(w.plan.Devices) {
+		return
+	}
+	dev := &w.plan.Devices[deviceIndex]
+	now := time.Now()
+	properties := make(map[string]TelemetryProperty)
+	if online {
+		w.sess.RLock()
+		for _, prop := range dev.Props {
+			if prop.PropID == "" {
+				w.log.Warn("属性缺少 ID，跳过遥测发布", "channel", w.name, "device", dev.DisplayName(), "prop", prop.Name)
+				continue
+			}
+			if value, ok := w.data[cacheKey(deviceIndex, prop.Name)]; ok {
+				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: value.Value, Timestamp: value.Timestamp}
+			} else {
+				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: nil, Timestamp: now}
+			}
+		}
+		w.sess.RUnlock()
+		w.addOnlineTelemetry(properties, dev, int64(1), now)
+	} else {
+		w.addOnlineTelemetry(properties, dev, int64(0), now)
+	}
+	w.sink.PublishTelemetry(TelemetryEvent{
+		ChannelID: w.id, DeviceIndex: deviceIndex, DeviceName: dev.DisplayName(),
+		CommNo: int(dev.UnitID), ModelID: dev.ModelID, ModelName: dev.ModelName,
+		Online: online, Properties: properties, Timestamp: now,
+	})
+}
+
+func (w *worker) addOnlineTelemetry(properties map[string]TelemetryProperty, dev *DevicePlan, value int64, timestamp time.Time) {
+	for _, prop := range dev.Props {
+		if prop.Name != OnlinePropName {
+			continue
+		}
+		if prop.PropID == "" {
+			w.log.Warn("在线状态属性缺少 ID，跳过遥测发布", "channel", w.name, "device", dev.DisplayName())
+			return
+		}
+		properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: value, Timestamp: timestamp}
+		return
+	}
+}
+
+// publishWriteResult 将异步写命令的最终结果交给外部数据出口。
+func (w *worker) publishWriteResult(cmd WriteCommand, err error) {
+	if w.sink == nil || cmd.RequestID == "" {
+		return
+	}
+	event := WriteResultEvent{
+		RequestID: cmd.RequestID, ChannelID: w.id, DeviceIndex: cmd.DeviceIndex,
+		OK: err == nil, Timestamp: time.Now(),
+	}
+	if err != nil {
+		event.Error = err.Error()
+	}
+	w.sink.PublishWriteResult(event)
+}
+
 // run 是链路主循环：连接（失败后按 reconnectRetries 策略重连）→ 采集循环 → ctx 取消则关闭退出。
 func (w *worker) run(ctx context.Context) {
 	defer close(w.done)
@@ -138,6 +202,7 @@ func (w *worker) run(ctx context.Context) {
 			connectAttempts++
 			w.setConnected(false, err.Error())
 			w.markAllOffline()
+			w.publishAllOffline()
 
 			// reconnectRetries == 0 表示无限重连；> 0 表示达到次数后放弃链路。
 			maxRetry := w.cfg.ReconnectRetries
@@ -145,13 +210,14 @@ func (w *worker) run(ctx context.Context) {
 				w.log.Error("链路连接失败次数已达上限，停止重连",
 					"channel", w.name, "target", w.cfg.Target(),
 					"attempts", connectAttempts, "max", maxRetry)
+				w.publishOfflineUntilStopped(ctx)
 				return
 			}
 
 			w.log.Warn("链路连接失败，稍后重试",
 				"channel", w.name, "target", w.cfg.Target(), "err", err,
 				"attempt", connectAttempts, "retryIn", reconnectInterval.String())
-			if !sleepCtx(ctx, reconnectInterval) {
+			if !w.waitReconnect(ctx, reconnectInterval) {
 				return
 			}
 			continue
@@ -168,7 +234,9 @@ func (w *worker) run(ctx context.Context) {
 		// 连接成功后进入采集循环；返回非 nil 表示需重连。
 		if w.collectLoop(ctx) {
 			w.setConnected(false, "")
-			if !sleepCtx(ctx, reconnectInterval) {
+			w.markAllOffline()
+			w.publishAllOffline()
+			if !w.waitReconnect(ctx, reconnectInterval) {
 				return
 			}
 			continue
@@ -199,9 +267,12 @@ func (w *worker) collectLoop(ctx context.Context) bool {
 		case cmd := <-w.writeCh:
 			if err := w.execWrite(ctx, cmd); err != nil {
 				w.log.Warn("写命令执行失败", "channel", w.name, "prop", cmd.PropName, "err", err)
+				w.publishWriteResult(cmd, err)
 				if isLinkError(err) {
 					return true // 需重连
 				}
+			} else {
+				w.publishWriteResult(cmd, nil)
 			}
 			continue // 写完成后立即检查下一条写命令，保证写优先
 		default:
@@ -213,11 +284,13 @@ func (w *worker) collectLoop(ctx context.Context) bool {
 			if err := w.pollDevice(ctx, dev); err != nil {
 				w.log.Warn("设备轮询失败", "channel", w.name, "device", dev.DisplayName(), "err", err)
 				w.setOnline(devIndexByName(w.plan, dev), false)
+				w.publishTelemetry(devIndexByName(w.plan, dev), false)
 				if isLinkError(err) {
 					return true
 				}
 			} else {
 				w.setOnline(devIndexByName(w.plan, dev), true)
+				w.publishTelemetry(devIndexByName(w.plan, dev), true)
 			}
 			devIdx++
 		}
@@ -566,6 +639,46 @@ func (w *worker) setOnline(devIdx int, online bool) {
 func (w *worker) markAllOffline() {
 	for i := range w.plan.Devices {
 		w.setOnline(i, false)
+	}
+}
+
+// publishAllOffline sends an offline-only telemetry snapshot for every device.
+func (w *worker) publishAllOffline() {
+	for i := range w.plan.Devices {
+		w.publishTelemetry(i, false)
+	}
+}
+
+// waitReconnect emits offline telemetry at the polling cadence while waiting to retry.
+func (w *worker) waitReconnect(ctx context.Context, retryInterval time.Duration) bool {
+	retry := time.NewTimer(retryInterval)
+	defer retry.Stop()
+	ticker := time.NewTicker(w.pollDuration())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-retry.C:
+			return true
+		case <-ticker.C:
+			w.publishAllOffline()
+		}
+	}
+}
+
+// publishOfflineUntilStopped keeps the offline state visible after reconnect attempts are exhausted.
+func (w *worker) publishOfflineUntilStopped(ctx context.Context) {
+	ticker := time.NewTicker(w.pollDuration())
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.publishAllOffline()
+		}
 	}
 }
 

@@ -7,9 +7,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// App 应用配置根节点。目前仅包含日志配置，后续可平级追加其他模块。
+// App 应用配置根节点。
 type App struct {
-	Log Log `yaml:"log"`
+	Log     Log     `yaml:"log"`
+	Gateway Gateway `yaml:"gateway"`
+	NATS    NATS    `yaml:"nats"`
+}
+
+// Gateway 是网关实例的静态标识配置。
+type Gateway struct {
+	GWID string `yaml:"gw_id"`
+}
+
+// NATS 是 Core NATS 客户端配置。
+type NATS struct {
+	Enabled              bool   `yaml:"enabled"`
+	URL                  string `yaml:"url"`
+	Name                 string `yaml:"name"`
+	QueueSize            int    `yaml:"queueSize"`
+	ConnectTimeout       int    `yaml:"connectTimeout"`
+	ReconnectWait        int    `yaml:"reconnectWait"`
+	MaxReconnects        int    `yaml:"maxReconnects"`
+	RetryOnFailedConnect bool   `yaml:"retryOnFailedConnect"`
+	ReconnectBufSize     int    `yaml:"reconnectBufSize"`
+	PingInterval         int    `yaml:"pingInterval"`
+	MaxPingsOut          int    `yaml:"maxPingsOut"`
+	SubjectPrefix        string `yaml:"subjectPrefix"`
 }
 
 // Log 日志相关配置参数。
@@ -27,17 +50,26 @@ type Log struct {
 
 // Default 返回内置默认配置，作为配置文件缺失或解析失败时的回退。
 func Default() App {
-	return App{Log: Log{
-		Level:       "info",
-		Console:     true,
-		File:        "logs/gateway.log",
-		MaxSizeMB:   20,
-		MaxBackups:  30,
-		MaxAgeDays:  30,
-		Compress:    true,
-		DailyRotate: true,
-		BufferSize:  500,
-	}}
+	return App{
+		Log: Log{
+			Level:       "info",
+			Console:     true,
+			File:        "logs/gateway.log",
+			MaxSizeMB:   20,
+			MaxBackups:  30,
+			MaxAgeDays:  30,
+			Compress:    true,
+			DailyRotate: true,
+			BufferSize:  500,
+		},
+		Gateway: Gateway{GWID: "gateway"},
+		NATS: NATS{
+			Enabled: false, URL: "nats://127.0.0.1:4222", Name: "gateway",
+			QueueSize: 4096, ConnectTimeout: 2000, ReconnectWait: 2000,
+			MaxReconnects: -1, RetryOnFailedConnect: true, ReconnectBufSize: 8388608,
+			PingInterval: 20000, MaxPingsOut: 3, SubjectPrefix: "powerpulse.gateway",
+		},
+	}
 }
 
 // Load 读取并解析 app.yaml；文件缺失或解析失败时回退到 Default。

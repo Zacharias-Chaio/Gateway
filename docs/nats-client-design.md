@@ -166,18 +166,19 @@ type MessageData struct {
   CommNo       int                `json:"comm_no"`       // 设备通讯号（Modbus Unit ID）
   ModelID      string             `json:"model_id"`      // 设备模型 ID
   ModelName    string             `json:"model_name"`    // 设备模型名称
-    Properties   map[string]PropVal `json:"properties"`    // 属性名 → 值
+    Properties   map[string]PropVal `json:"properties"`    // 属性 ID → 属性值
 }
 
 // PropVal 单个属性值，对齐 engine.SessionEntry。
 type PropVal struct {
+  Name      string `json:"name"`      // 属性名称
     Value     any   `json:"value"`     // 工程值；解析异常时为 null
     Timestamp int64 `json:"timestamp"` // 采集时间，Unix 毫秒
 }
 ```
 
 **说明**
-- `properties` 为 map 而非数组：订阅方按属性名索引，与引擎 `SessionEntry` 语义一致；
+- `properties` 为 map 而非数组：key 是模型属性 ID，订阅方可稳定索引；每个值同时携带属性名称；
   需区分同通道多设备时使用 `device_index`（等价于引擎 cacheKey 的 `deviceIndex/propName` 前缀）。
 - **每轮采集按设备发送一条完整消息**：设备的全部属性为一个传输单位，完成该设备一轮采集后立即上送；属性值即使未变化也不得省略。
 - 设备掉线时，`properties` **仅包含**内置虚拟属性 `"在线状态"`，值为 `0`；不携带该设备其他属性的历史值。

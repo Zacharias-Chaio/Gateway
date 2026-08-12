@@ -35,6 +35,7 @@ type DeviceMount struct {
 type DevicePlan struct {
 	UnitID    byte                 // 从站地址
 	Name      string               // 设备名称（用户填写，日志/展示用）
+	ModelID   string               // 设备模型 ID
 	ModelName string               // 模型名称（日志用）
 	Protocol  string               // 协议类型（"Modbus RTU" / "Modbus TCP"）
 	Conv      converter.FrameIO    // 协议转换器
@@ -121,6 +122,7 @@ func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (
 			continue
 		}
 		dp.Name = mt.Name
+		dp.ModelID = mt.ModelID
 		plan.Devices = append(plan.Devices, *dp)
 	}
 
@@ -190,6 +192,7 @@ func buildDevicePlan(model store.DeviceModel, commNo int) (*DevicePlan, error) {
 
 	return &DevicePlan{
 		UnitID:    byte(commNo),
+		ModelID:   model.ID,
 		ModelName: model.Name,
 		Protocol:  proto,
 		Conv:      conv,
@@ -202,6 +205,7 @@ func buildDevicePlan(model store.DeviceModel, commNo int) (*DevicePlan, error) {
 
 // WriteCommand 是一条设备写指令。
 type WriteCommand struct {
+	RequestID   string  // 外部请求 ID；为空表示非消息总线命令
 	DeviceIndex int     // 设备在 ChannelPlan.Devices 中的序号
 	PropName    string  // 属性名
 	RawValue    float64 // 工程值（尚未逆变换，worker 侧做逆变换后编码）

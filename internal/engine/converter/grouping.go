@@ -30,7 +30,7 @@ const DefaultMaxRegs = 125
 // PropMeta 描述单个属性的协议映射元数据（来自设备模型 JSON）。
 type PropMeta struct {
 	Name         string  `json:"name"`
-	PropID       string  `json:"propId"`
+	PropID       string  `json:"id"`
 	DataType     string  `json:"dataType"`
 	StartBit     int     `json:"startBit"`       // 起始位（bit 0 = 最低位）
 	EndBit       int     `json:"endBit"`         // 终止位（含），regCount = ceil((endBit+1)/16)

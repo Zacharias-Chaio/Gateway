@@ -1,5 +1,8 @@
-# 应用配置
-# 目前仅包含日志相关参数；后续可在此追加其他模块配置。
+# 网关， 命名规则:gw_001, gw_002, gw_003, ...
+gateway:
+  gw_id: gw_001
+
+# 日志相关参数。
 log:
   level: info              # 日志级别：debug | info | warn | error
   console: true            # 终端窗口输出
@@ -10,3 +13,18 @@ log:
   compress: true           # 轮转后的历史文件是否 gzip 压缩
   dailyRotate: true        # 是否每日 00:00 轮转
   bufferSize: 500          # 前端出口环形缓冲保留的最近日志条数
+
+#  Core NATS 数据出口配置。
+nats:
+  enabled: true
+  url: nats://127.0.0.1:4222
+  name: gateway
+  queueSize: 4096
+  connectTimeout: 2000
+  reconnectWait: 2000
+  maxReconnects: -1
+  retryOnFailedConnect: true
+  reconnectBufSize: 8388608
+  pingInterval: 20000
+  maxPingsOut: 3
+  subjectPrefix: powerpulse.gateway

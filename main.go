@@ -13,6 +13,7 @@ import (
 	"gateway/internal/config"
 	"gateway/internal/engine"
 	"gateway/internal/logx"
+	"gateway/internal/natsclient"
 	"gateway/internal/store"
 	"gateway/internal/web"
 )
@@ -54,6 +55,15 @@ func main() {
 
 	// 创建链路引擎，加载已保存的链路和设备模型并启动（每条链路一个 goroutine）。
 	eng := engine.New(ctx)
+	var natsClient *natsclient.Client
+	if cfg.NATS.Enabled {
+		natsClient, err = natsclient.New(ctx, cfg.Gateway.GWID, cfg.NATS, db, eng)
+		if err != nil {
+			logger.Error("启动 NATS 客户端失败", "err", err)
+			os.Exit(1)
+		}
+		eng.SetEventSink(natsClient)
+	}
 	var channels []store.Channel
 	if err := db.Order("id asc").Find(&channels).Error; err != nil {
 		logger.Warn("加载链路配置失败，引擎以空配置启动", "err", err)
@@ -82,7 +92,10 @@ func main() {
 	stop() // 恢复默认信号处理：再次 Ctrl+C 可强制退出
 	logger.Info("正在关闭服务…")
 
-	eng.Stop() // 关闭所有链路 goroutine
+	eng.Stop() // 等待所有 worker 退出，确保不再向 NATS 事件队列投递数据。
+	if natsClient != nil {
+		natsClient.Close()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

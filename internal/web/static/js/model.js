@@ -70,9 +70,6 @@ function fillProfileForm() {
 const IFACE_LABEL = { Serial:'串口', Network:'网络', CAN:'CAN' };
 function ifaceLabel(v) { return IFACE_LABEL[v] || v || '—'; }
 function emptyProfile() { return { profileIndex:null, profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:null, interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 100 }; }
-function genModelId() { return nextProfileId(); } // 统一使用 UUID 作为模型 ID，与后端一致
-function uuid() { return crypto.randomUUID(); }
-function nextProfileId() { return uuid(); }
 function nextProfileIndex() { let n = 0; while (state.models.some(m => m.profile && String(m.profile.profileIndex) === String(n))) n++; return n; }
 function loadModelIntoBuffer(m) {
   state.profile = deepCopy(m.profile);
@@ -87,7 +84,7 @@ function saveBufferIntoModel() {
 }
 function newModel() {
   const prof = emptyProfile();
-  const modelId = nextProfileId();
+  const modelId = crypto.randomUUID();
   prof.profileId = modelId;
   prof.profileIndex = nextProfileIndex();
   const m = {

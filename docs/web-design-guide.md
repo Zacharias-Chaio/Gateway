@@ -423,7 +423,8 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft Y
   - Serial → `bi-usb-symbol`
   - Network → `bi-ethernet`
   - CAN → `bi-hdd-network`
-- 一级导航图标：`bi-cpu`（设备）/`bi-diagram-3`（链路）/`bi-activity`（实时）/`bi-journal-text`（日志）
+- 一级导航图标：`bi-cpu`（设备）/`bi-diagram-3`（链路）/`bi-activity`（实时）/`bi-journal-text`（报文信息）
+- 网关设置导航图标：`bi-gear`
 - 品牌图标：`bi-hdd-network-fill`
 
 ---
@@ -464,8 +465,8 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft Y
            align-items:center;justify-content:center;font-size:24px;">
         <i class="bi bi-hdd-network-fill"></i>
       </div>
-      <h5 class="fw-bold mt-3 mb-0">IoT 网关配置</h5>
-      <div class="text-muted small">请登录以继续</div>
+      <h5 class="fw-bold mt-3 mb-0">IoT-Gateway</h5>
+      <div class="text-muted small">Please login</div>
     </div>
     <!-- 用户名 / 密码 / 错误提示 / 登录按钮 -->
   </div>
@@ -476,6 +477,9 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft Y
 - 卡片宽 **360px**，圆角 16px，使用 `var(--card-shadow)`
 - 品牌图标采用主色实心方块 + 白字图标
 - 错误提示 `text-danger small` + `d-none` 切换
+- 登录成功后将 `gw_auth=1` 写入 `sessionStorage` 并给遮罩添加 `d-none`；不移除遮罩节点，供登出后复用。
+- 主内容区顶端使用 `.app-topbar` 右对齐退出按钮，按钮采用 `btn btn-outline-secondary btn-sm` 与 `bi-box-arrow-right`；登出时清除 `gw_auth`、清空密码、显示遮罩并聚焦用户名输入框。
+- 当前登录仅为前端会话门面，没有后端鉴权；不得将其视为访问控制边界。
 
 ---
 

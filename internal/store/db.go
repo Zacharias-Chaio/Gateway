@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"gateway/internal/config"
 	"gateway/internal/logx"
 
 	"github.com/glebarez/sqlite"
@@ -24,7 +25,7 @@ func Open(path string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&DeviceModel{}, &Channel{}); err != nil {
+	if err := db.AutoMigrate(&DeviceModel{}, &Channel{}, &config.Record{}); err != nil {
 		return nil, err
 	}
 	return db, nil

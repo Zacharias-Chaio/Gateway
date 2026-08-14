@@ -28,14 +28,23 @@ type Options struct {
 	BufferSize  int    // 前端出口环形缓冲条数
 }
 
+type runtimeState struct {
+	logger       *slog.Logger
+	sink         *ringSink
+	stopRotation func()
+}
+
 var (
-	mu   sync.RWMutex
-	root *slog.Logger
-	sink *ringSink // 前端出口的环形缓冲
+	mu      sync.RWMutex
+	initMu  sync.Mutex
+	runtime runtimeState
 )
 
 // Init 按配置装配三路输出并设置为全局默认日志器。可重复调用（热重载配置）。
 func Init(opt Options) {
+	initMu.Lock()
+	defer initMu.Unlock()
+
 	level := ParseLevel(opt.Level)
 	var handlers []slog.Handler
 
@@ -45,34 +54,46 @@ func Init(opt Options) {
 	}
 
 	// 2) 滚动文件：JSON 格式，便于后续采集/检索；大小 + 每日轮转。
+	var stopRotation func()
 	if opt.File != "" {
-		handlers = append(handlers, slog.NewJSONHandler(newRotator(opt), &slog.HandlerOptions{Level: level}))
+		writer, stop := newRotator(opt)
+		stopRotation = stop
+		handlers = append(handlers, slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: level}))
 	}
 
-	// 3) 前端出口：写入环形缓冲，供 /api/syslog 拉取与 SSE 推送。
-	s := newRingSink(opt.BufferSize)
+	// 3) 前端出口：复用已有缓冲，避免热重载中断已建立的 SSE 订阅。
+	mu.Lock()
+	s := runtime.sink
+	if s == nil {
+		s = newRingSink(opt.BufferSize)
+	} else {
+		s.resize(opt.BufferSize)
+	}
+	previous := runtime
+	mu.Unlock()
 	handlers = append(handlers, s.handler(level))
 
 	logger := slog.New(&fanout{handlers: handlers})
 
 	mu.Lock()
-	root = logger
-	sink = s
+	runtime = runtimeState{logger: logger, sink: s, stopRotation: stopRotation}
+	slog.SetDefault(logger) // 与运行态替换保持同一临界区，避免并发重载顺序倒退。
 	mu.Unlock()
-
-	slog.SetDefault(logger) // 让散落的 slog.Info / 桥接的标准库 log 也走这里
+	if previous.stopRotation != nil {
+		previous.stopRotation()
+	}
 }
 
 // Module 返回带模块标签的“分支”日志器；name 会作为 mod 字段附加到每条日志。
 // 未初始化时回退到 slog 默认器，保证任何时刻调用都安全。
 func Module(name string) *slog.Logger {
 	mu.RLock()
-	r := root
+	logger := runtime.logger
 	mu.RUnlock()
-	if r == nil {
+	if logger == nil {
 		return slog.Default().With("mod", name)
 	}
-	return r.With("mod", name)
+	return logger.With("mod", name)
 }
 
 // ParseLevel 把级别字符串解析为 slog.Level，未知值回退 Info。

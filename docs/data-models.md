@@ -153,7 +153,7 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `serialName` | `string` | 串口节点（如 `/dev/ttyS1`），从 `hardware.yaml` 映射 |
+| `serialName` | `string` | 串口节点（如 `/dev/ttyS1`），从数据库接口映射转换 |
 | `baudRate` | `int` | 波特率 |
 | `dataBits` | `int` | 数据位（7/8） |
 | `parity` | `string` | 校验：`None` / `Even` / `Odd` |
@@ -185,9 +185,11 @@
 | `modelId` | `string` | 引用的设备模型 ID |
 | `modelName` | `string` | 模型名称（冗余，仅展示用） |
 
-### 2.4 硬件接口映射
+### 2.4 接口映射
 
-`configs/hardware.yaml` 定义面板丝印标签与实际设备节点的映射：
+`gateway_settings` 记录同时保存应用配置和硬件映射；其中 `app.gateway.gw_id` 是网关唯一 ID，`app.gateway.location` 是可选的部署位置描述。
+
+硬件映射定义面板丝印标签与实际设备节点的关系。首次创建数据库时，静态默认值来自 `internal/config/config.go`：
 
 ```yaml
 Serial:        # 串口
@@ -199,7 +201,7 @@ CAN:           # CAN 口
   CAN1: can0
 ```
 
-前端配置时选择丝印标签（如 `COM1`），保存时由 `buildChannelConfig` 自动替换为真实节点（如 `/dev/ttyS1`）。通过 `GET /api/hardware` 接口读取。
+前端配置时选择丝印标签（如 `COM1`），保存时由 `buildChannelConfig` 自动替换为真实节点（如 `/dev/ttyS1`）。通过 `GET /api/hardware` 接口从数据库读取。
 
 ### 2.5 REST 接口
 
@@ -208,7 +210,11 @@ CAN:           # CAN 口
 | `GET` | `/api/channels` | 列出全部链路（按 `id asc`） |
 | `POST` | `/api/channels` | 新建/更新链路（含冲突检测），成功后触发**引擎热重载** |
 | `DELETE` | `/api/channels/{id}` | 删除链路，成功后触发**引擎热重载** |
-| `GET` | `/api/hardware` | 读取 `hardware.yaml` 硬件接口映射 |
+| `GET` | `/api/hardware` | 读取数据库中的接口映射 |
+| `GET` | `/api/settings` | 读取完整网关设置 |
+| `POST` | `/api/settings` | 保存完整网关设置 |
+| `GET` | `/api/system-info` | 读取操作系统、系统时间和 Gateway 版本 |
+| `POST` | `/api/restart` | 进程内重启运行资源（引擎和 NATS），HTTP 服务保持运行 |
 
 #### 链路冲突检测
 

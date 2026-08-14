@@ -32,6 +32,19 @@ func newRingSink(size int) *ringSink {
 	return &ringSink{size: size, subs: make(map[chan Entry]struct{})}
 }
 
+// resize updates retention without replacing the sink or disconnecting subscribers.
+func (s *ringSink) resize(size int) {
+	if size <= 0 {
+		size = 500
+	}
+	s.mu.Lock()
+	s.size = size
+	if len(s.buf) > size {
+		s.buf = s.buf[len(s.buf)-size:]
+	}
+	s.mu.Unlock()
+}
+
 // push 追加一条日志：超出容量丢弃最旧，并非阻塞地广播给订阅者。
 func (s *ringSink) push(e Entry) {
 	s.mu.Lock()
@@ -121,7 +134,7 @@ func (h *sinkHandler) WithGroup(name string) slog.Handler {
 func SyslogHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mu.RLock()
-		s := sink
+		s := runtime.sink
 		mu.RUnlock()
 		var data []Entry
 		if s != nil {
@@ -136,7 +149,7 @@ func SyslogHandler() http.HandlerFunc {
 func SyslogStreamHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mu.RLock()
-		s := sink
+		s := runtime.sink
 		mu.RUnlock()
 		fl, ok := w.(http.Flusher)
 		if s == nil || !ok {

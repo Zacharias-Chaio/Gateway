@@ -2,13 +2,15 @@
 
 ### 1. 客户端配置
 
+NATS 配置保存在 SQLite 的 `gateway_settings` 中，通过 Web 的“网关设置”页面维护；以下结构仅表示字段与静态默认值参考。
+
 ```yaml
 # 数据出口：NATS 发布配置
 gateway:
   gw_id: "gw-001"               # 网关唯一 ID
 
 nats:
-  enabled: true              # 总开关
+  enabled: false             # 总开关，默认关闭
   url: nats://127.0.0.1:4222 # 连接串，支持集群逗号分隔 / token / user:pass
   name: gateway              # 连接名，服务端监控可见
 
@@ -19,7 +21,7 @@ nats:
   connectTimeout: 2000        # 每次建连的 TCP/TLS 握手超时（毫秒）
   reconnectWait: 2000         # 重连间隔（毫秒）
   maxReconnects: -1            # 最大重连次数 -1表示无限重连 
-  retryOnFailedConnect: true  # 启动时 NATS 未就绪也照常运行，后台重连
+  retryOnFailedConnect: true  # nats.go 建连失败时允许重试
   reconnectBufSize: 8388608   # 断连期间 nats.go 内存缓冲（字节，默认 8MB），重连成功后自动补发
 
   # 连接保活
@@ -33,6 +35,13 @@ nats:
   #   控制接收 → {subjectPrefix}.{gatewayID}.cmd
   #   查询接口 → {subjectPrefix}.{gatewayID}.query
 ```
+
+### 1.1 启动与降级行为
+
+- 仅当 `nats.enabled: true` 时创建 NATS 客户端；默认配置不启用北向数据功能。
+- 连接、订阅或订阅初始化超时失败时，网关记录警告但不退出，继续提供链路引擎与 Web 配置服务。
+- 初始化失败时不会安装引擎事件出口：不发布 `.data` 数据，也不订阅 `.cmd` 或 `.query` 主题。
+- 此降级实例不在进程内重新创建 NATS 客户端；NATS 服务恢复后需要重启网关。
 
 ### 2. 主题定义
 

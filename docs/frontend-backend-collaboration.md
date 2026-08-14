@@ -28,7 +28,7 @@
 | 层 | 目录 | 职责 | 对外暴露 |
 |----|------|------|----------|
 | 入口 | `main.go` | 装配、信号监听、优雅退出 | — |
-| 配置 | `internal/config` | 加载 `configs/app.yaml` | `config.App` |
+| 配置 | `internal/config` | 静态默认值与数据库设置读写 | `config.Settings` |
 | 路由 | `internal/web` | chi 路由、静态分发、请求日志 | `Router(...)` |
 | API | `internal/api` | REST 处理器、引擎回调 | `api.Server` |
 | 存储 | `internal/store` | GORM 模型与迁移 | `store.Open(...)` |
@@ -495,7 +495,7 @@ state.channels[i]     ──toPayload──►  { id, name, type, config, device
 
 ### 5.3 硬件配置协作
 
-[configs/hardware.yaml](file:///f:/Code/Gateway/configs/hardware.yaml) 的丝印 ↔ 节点映射：
+数据库 `gateway_settings` 中的丝印 ↔ 节点映射：
 
 ```yaml
 Serial:
@@ -503,12 +503,12 @@ Serial:
 ```
 
 **协作流程**：
-1. 后端 `/api/hardware` 返回 `{ Serial: {COM1:"/dev/ttyS1",...}, ... }`，缺失时回退 `defaultHardware()`
-2. 前端 `loadHardware` 存入 `state.hardware`
+1. 后端 `/api/settings` 返回应用与硬件设置，`/api/hardware` 返回其硬件映射 `{ Serial: {COM1:"/dev/ttyS1",...}, ... }`
+2. 新数据库由 `config.DefaultSettings()` 写入静态默认映射；前端 `loadSettings` 存入 `state.hardware`
 3. 渲染下拉框：`option value=真实节点, 文本=丝印标签`
 4. 用户选择丝印 → 提交时 value 自动为真实节点
 
-**规范**：硬件配置与代码解耦，部署到不同设备仅改 YAML；前端通过丝印降低认知负担，导出 JSON 用真实节点保证可执行。
+**规范**：硬件配置由数据库持久化，通过“网关设置”页面修改；前端通过丝印降低认知负担，导出 JSON 用真实节点保证可执行。
 
 ---
 
@@ -766,7 +766,7 @@ async function delete{Module}(id) {
 | gorm.io/gorm | v1.25.12 | ORM |
 | gorm.io/datatypes | v1.2.1 | JSON 字段类型 |
 | glebarez/sqlite | v1.11.0 | 纯 Go SQLite（无 CGO） |
-| gopkg.in/yaml.v3 | v3.0.1 | YAML 配置 |
+| gopkg.in/yaml.v3 | v3.0.1（间接） | `go.bug.st/serial` 测试依赖；网关不使用 YAML 配置 |
 | gopkg.in/natefinch/lumberjack.v2 | v2.2.1 | 日志滚动 |
 | go.bug.st/serial | v1.6.2 | 串口通信 |
 | Bootstrap | 5.3.2 | 前端 CSS（CDN） |

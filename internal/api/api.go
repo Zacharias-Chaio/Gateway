@@ -3,8 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"runtime"
+	"time"
 
+	"gateway/internal/buildinfo"
+	"gateway/internal/config"
 	"gateway/internal/engine"
+	"gateway/internal/logx"
 	"gateway/internal/store"
 
 	"gorm.io/gorm"
@@ -13,8 +18,6 @@ import (
 // Server 持有数据库句柄，挂载所有 REST 接口。
 type Server struct {
 	DB *gorm.DB
-	// HardwarePath 指向描述硬件接口的 YAML 配置文件。
-	HardwarePath string
 	// Engine 负责链路的运行与热重载；链路配置变更后回调其 Apply。
 	// 允许为 nil（例如未启用引擎的场景）。
 	Engine EngineFacade
@@ -33,11 +36,49 @@ type EngineFacade interface {
 	CommunicationSnapshot(channelID, deviceIndex int, afterSeq uint64, limit int) (engine.CommunicationSnapshot, bool)
 }
 
-func New(db *gorm.DB, hardwarePath string) *Server {
-	if hardwarePath == "" {
-		hardwarePath = "hardware.yaml"
+// RuntimeFacade exposes the restartable runtime resources used by the HTTP API.
+type RuntimeFacade interface {
+	EngineFacade
+	Restart() bool
+	Status() any
+}
+
+func New(db *gorm.DB) *Server {
+	return &Server{DB: db}
+}
+
+func applyLogSettings(app config.App) {
+	logx.Init(app.LogOptions())
+}
+
+// SystemInfo is read-only runtime metadata shown in the gateway settings UI.
+type SystemInfo struct {
+	OperatingSystem string `json:"operatingSystem"`
+	SystemTime      string `json:"systemTime"`
+	GatewayVersion  string `json:"gatewayVersion"`
+}
+
+// GetSystemInfo returns the current host operating system, time, and build version.
+func (s *Server) GetSystemInfo(w http.ResponseWriter, r *http.Request) {
+	ok(w, SystemInfo{
+		OperatingSystem: runtime.GOOS,
+		SystemTime:      time.Now().Format(time.RFC3339),
+		GatewayVersion:  buildinfo.Version,
+	})
+}
+
+// Restart requests an in-process runtime restart without terminating the gateway process.
+func (s *Server) Restart(w http.ResponseWriter, r *http.Request) {
+	runtime, ok := s.Engine.(RuntimeFacade)
+	if !ok {
+		fail(w, http.StatusServiceUnavailable, "运行时重启不可用")
+		return
 	}
-	return &Server{DB: db, HardwarePath: hardwarePath}
+	if !runtime.Restart() {
+		fail(w, http.StatusConflict, "软件正在重启，请稍候")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"code": 0, "data": map[string]string{"status": "restarting"}})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

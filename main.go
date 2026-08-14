@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"gateway/internal/config"
-	"gateway/internal/engine"
+	"gateway/internal/gatewayruntime"
 	"gateway/internal/logx"
-	"gateway/internal/natsclient"
 	"gateway/internal/store"
 	"gateway/internal/web"
 )
@@ -21,64 +20,29 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP 监听地址")
 	dbPath := flag.String("db", "data/config.db", "SQLite 配置数据库路径")
-	hwPath := flag.String("hardware", "configs/hardware.yaml", "硬件接口配置文件路径")
-	cfgPath := flag.String("config", "configs/app.yaml", "应用配置文件路径")
 	flag.Parse()
 
-	// 加载应用配置并初始化统一日志管理器（终端 + 文件 + 前端出口）。
-	cfg, cfgErr := config.Load(*cfgPath)
-	logx.Init(logx.Options{
-		Level:       cfg.Log.Level,
-		Console:     cfg.Log.Console,
-		File:        cfg.Log.File,
-		MaxSizeMB:   cfg.Log.MaxSizeMB,
-		MaxBackups:  cfg.Log.MaxBackups,
-		MaxAgeDays:  cfg.Log.MaxAgeDays,
-		Compress:    cfg.Log.Compress,
-		DailyRotate: cfg.Log.DailyRotate,
-		BufferSize:  cfg.Log.BufferSize,
-	})
+	// 在数据库打开前先使用内置日志配置；随后改用数据库中的持久化设置。
+	logx.Init(config.Default().LogOptions())
 	logger := logx.Module("main")
-	if cfgErr != nil {
-		logger.Warn("加载应用配置失败，已回退默认日志配置", "path", *cfgPath, "err", cfgErr)
-	}
 
 	db, err := store.Open(*dbPath)
 	if err != nil {
 		logger.Error("打开数据库失败", "err", err)
 		os.Exit(1)
 	}
-
-	// 监听中断/终止信号，实现优雅退出；该 ctx 同时作为链路引擎的父上下文。
+	// 监听中断/终止信号；每次软件重启均在该进程上下文中重建运行资源。
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 创建链路引擎，加载已保存的链路和设备模型并启动（每条链路一个 goroutine）。
-	eng := engine.New(ctx)
-	var natsClient *natsclient.Client
-	if cfg.NATS.Enabled {
-		natsClient, err = natsclient.New(ctx, cfg.Gateway.GWID, cfg.NATS, db, eng)
-		if err != nil {
-			logger.Error("启动 NATS 客户端失败", "err", err)
-			os.Exit(1)
-		}
-		eng.SetEventSink(natsClient)
+	runtime, err := gatewayruntime.New(ctx, db)
+	if err != nil {
+		logger.Error("初始化网关运行时失败", "err", err)
+		os.Exit(1)
 	}
-	var channels []store.Channel
-	if err := db.Order("id asc").Find(&channels).Error; err != nil {
-		logger.Warn("加载链路配置失败，引擎以空配置启动", "err", err)
-	}
-	var models []store.DeviceModel
-	if err := db.Order("profile_index asc").Find(&models).Error; err != nil {
-		logger.Warn("加载设备模型失败，引擎以空模型启动", "err", err)
-	}
-	plans, warnings := engine.BuildPlans(channels, models)
-	for _, wn := range warnings {
-		logger.Warn("采集计划构建警告", "warn", wn)
-	}
-	eng.Apply(plans, models)
+	logger = logx.Module("main")
 
-	srv := &http.Server{Addr: *addr, Handler: web.Router(db, *hwPath, eng)}
+	srv := &http.Server{Addr: *addr, Handler: web.Router(db, runtime)}
 
 	go func() {
 		logger.Info("网关微服务启动", "addr", *addr, "url", "http://localhost"+*addr)
@@ -92,10 +56,7 @@ func main() {
 	stop() // 恢复默认信号处理：再次 Ctrl+C 可强制退出
 	logger.Info("正在关闭服务…")
 
-	eng.Stop() // 等待所有 worker 退出，确保不再向 NATS 事件队列投递数据。
-	if natsClient != nil {
-		natsClient.Close()
-	}
+	runtime.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

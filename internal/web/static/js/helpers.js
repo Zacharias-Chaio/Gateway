@@ -30,5 +30,9 @@ function switchSection(key) {
   document.getElementById('nav-' + key).classList.add('active');
   if (key === 'realtime') renderRealtime(); else rtStopPolling();
   if (key === 'log') renderLogSelectors(); else logStopPolling();
+  if (key === 'settings') {
+    renderSettings();
+    loadSystemInfo().then(updateSystemInfo);
+  }
 }
 

@@ -13,12 +13,6 @@ const ACCESS_FROM_LABEL = { '只读':'r', '只写':'w', '读写':'rw', 'R':'r', 
 const CHANNEL_TYPE_LABEL = { Serial:'串口通道', Network:'网络通道', CAN:'CAN通道' };
 const CHANNEL_TYPE_ICON = { Serial:'usb-symbol', Network:'ethernet', CAN:'hdd-network' };
 const PARITY_LABEL = { None:'无', Even:'偶校验', Odd:'奇校验' };
-const DEFAULT_HARDWARE = {
-  Serial: { COM1: '/dev/ttyS1', COM2: '/dev/ttyS2' },
-  Ethernet: { ETH1: 'eth0', ETH2: 'eth2' },
-  CAN: { CAN1: 'can0', CAN2: 'can1' }
-};
-
 const CSV_HEADERS = ['属性ID','属性名称','属性描述','数据类型','起始位','终止位','读写属性','偏移量','数据系数','数据单位','读功能码','写功能码','寄存器基址','寄存器偏移','字节顺序'];
 const CSV_FIELD_MAP = {
   '属性ID':'id','id':'id',
@@ -43,6 +37,8 @@ const CSV_FIELD_MAP = {
 const state = {
   models: [],
   hardware: {},
+  settings: null,
+  systemInfo: null,
   channels: [],
   editingId: null,
   channel: null,

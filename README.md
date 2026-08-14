@@ -17,7 +17,7 @@ IoT 网关配置服务 —— 单一 Go 二进制，内嵌 Web 前端与 SQLite�
 | 浏览器 | 现代浏览器（访问 Web 配置界面） |
 | 依赖 | 无外部运行时依赖，单文件即可运行 |
 
-主要技术栈：`go-chi/chi` 路由、`gorm` ORM、`lumberjack` 日志轮转、`yaml.v3` 配置解析，前端通过 `embed.FS` 编译进二进制。
+主要技术栈：`go-chi/chi` 路由、`gorm` ORM、`lumberjack` 日志轮转，前端通过 `embed.FS` 编译进二进制。
 
 ---
 
@@ -27,9 +27,6 @@ IoT 网关配置服务 —— 单一 Go 二进制，内嵌 Web 前端与 SQLite�
 Gateway/
 ├── main.go                  # 程序入口，解析命令行参数并启动 HTTP 服务
 ├── go.mod / go.sum
-├── configs/
-│   ├── app.yaml             # 应用配置（日志级别/轮转/输出路径等）
-│   └── hardware.yaml        # 硬件接口映射（COM/ETH/CAN 丝印 → 设备节点）
 ├── data/                    # 运行时生成：SQLite 数据库（config.db）
 ├── logs/                    # 运行时生成：gateway.log 及轮转归档
 ├── internal/
@@ -67,13 +64,13 @@ go mod download
 ### 2. 本机直接编译
 
 ```bash
-go build -o gateway .
+go build -ldflags="-X gateway/internal/buildinfo.Version=v1.0.0" -o gateway .
 ```
 
 Windows PowerShell 下：
 
 ```powershell
-go build -o gateway.exe .
+go build -ldflags="-X gateway/internal/buildinfo.Version=v1.0.0" -o gateway.exe .
 ```
 
 ### 3. 交叉编译到 aarch64 / Ubuntu（部署目标）
@@ -82,16 +79,17 @@ go build -o gateway.exe .
 
 ```bash
 # Linux / macOS shell
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o gateway_arm64 .
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X gateway/internal/buildinfo.Version=v1.0.0" -o gateway_arm64 .
 
 # Windows PowerShell
 $env:GOOS="linux"; $env:GOARCH="arm64"; $env:CGO_ENABLED="0"
-go build -trimpath -ldflags="-s -w" -o gateway_arm64 .
+go build -trimpath -ldflags="-s -w -X gateway/internal/buildinfo.Version=v1.0.0" -o gateway_arm64 .
 Remove-Item Env:\GOOS, Env:\GOARCH, Env:\CGO_ENABLED
 ```
 
 - `-trimpath`：去除本地路径信息；
 - `-ldflags="-s -w"`：去除调试符号，缩小体积；
+- `-X gateway/internal/buildinfo.Version=v1.0.0`：注入软件信息卡展示的 Gateway 版本；未注入时显示 `dev`；
 - 产物 `gateway_arm64` 拷贝到目标设备即可运行，无需安装 Go。
 
 ### 4. 校验产物架构（可选）
@@ -111,18 +109,21 @@ file gateway_arm64   # 期望: ELF 64-bit LSB executable, ARM aarch64
 ```
 /opt/gateway/
 ├── gateway_arm64          # 可执行文件（赋予执行权限）
-├── configs/
-│   ├── app.yaml
-│   └── hardware.yaml      # 按设备实际丝印/节点修改
 ```
 
 ```bash
 chmod +x gateway_arm64
 ```
 
-### 2. 配置文件说明
+### 2. 网关设置
 
-**`configs/app.yaml`** —— 应用（日志）配置：
+应用与硬件设置保存在 SQLite 的 `gateway_settings` 记录中。首次启动新数据库时，服务会自动写入内置默认值；后续启动始终优先读取数据库。通过 Web 界面的“网关设置”修改并保存即可实时写入数据库。
+
+“网关信息 / 日志设置 / NATS 客户端 / 接口映射 / 软件信息 / 软件设置”六类设置以卡片形式管理：日志配置保存后立即生效，网关信息与 NATS 配置在重启服务后生效。软件信息卡只读展示操作系统、系统时间和 Gateway 版本；软件设置可在不退出进程的情况下重建运行资源。
+
+静态默认值定义在 `internal/config/config.go`；YAML 配置文件不再使用，也不需要随程序部署。
+
+应用设置字段：
 
 | 字段 | 说明 |
 |------|------|
@@ -135,8 +136,13 @@ chmod +x gateway_arm64
 | `log.compress` | 历史文件是否 gzip 压缩 |
 | `log.dailyRotate` | 是否每日 00:00 轮转 |
 | `log.bufferSize` | 前端 SSE 日志出口环形缓冲条数 |
+| `gateway.gw_id` | 网关唯一 ID；启用 NATS 时用于生成主题 |
+| `gateway.location` | 网关部署位置描述 |
+| `nats.enabled` | 是否启用 NATS 北向数据出口；默认 `false` |
+| `nats.url` | NATS 服务端连接地址 |
+| `nats.subjectPrefix` | NATS 主题前缀；完整字段见 [docs/nats-client-design.md](docs/nats-client-design.md) |
 
-**`configs/hardware.yaml`** —— 硬件接口映射，描述面板丝印与实际设备节点的对应关系：
+接口映射描述面板丝印与实际设备节点的对应关系：
 
 ```yaml
 Serial:        # 串口
@@ -158,9 +164,7 @@ CAN:           # CAN 总线
 ```bash
 ./gateway_arm64 \
   -addr :8080 \
-  -db data/config.db \
-  -hardware configs/hardware.yaml \
-  -config configs/app.yaml
+  -db data/config.db
 ```
 
 ### 2. 命令行参数
@@ -169,8 +173,6 @@ CAN:           # CAN 总线
 |------|--------|------|
 | `-addr` | `:8080` | HTTP 监听地址 |
 | `-db` | `data/config.db` | SQLite 配置数据库路径 |
-| `-hardware` | `configs/hardware.yaml` | 硬件接口配置文件 |
-| `-config` | `configs/app.yaml` | 应用配置文件 |
 
 所有参数均可省略，使用上述默认值。首次启动会自动创建 `data/`、`logs/` 目录与数据库。
 
@@ -188,7 +190,7 @@ CAN:           # CAN 总线
 http://<设备IP>:8080
 ```
 
-即可进入配置向导，覆盖 **设备模型 / 链路通道 / 实时数据 / 日志监控** 四大模块。当前链路通道保存后会同步到后端 engine 并按配置热重载；实时数据、业务日志接口仍为 mock 占位。
+即可进入配置向导，覆盖 **设备模型 / 链路通道 / 实时数据 / 报文信息** 四大模块。前端登录态仅保存在当前浏览器会话中；右上角的“退出登录”会清除该会话并返回登录界面。当前链路通道保存后会同步到后端 engine 并按配置热重载；实时数据接口仍为 mock 占位。
 
 ### 4. 链路运行行为
 
@@ -198,6 +200,12 @@ http://<设备IP>:8080
 - TCP/串口驱动已具备 `Open / Send / Receive / Refresh / Close` 抽象；CAN 当前为占位实现，打开时返回暂不支持。
 - 链路打开失败后固定每 `3s` 重连一次。
 - 当前阶段不做应用层心跳和协议轮询；若 TCP 建连后完全没有报文交互，无法可靠感知“半开连接”断线。
+
+### 5. NATS 数据出口降级
+
+- `nats.enabled` 默认关闭；开启后，网关会初始化 NATS 数据发布、命令订阅和拓扑查询。
+- NATS 在启动时连接、订阅或初始化超时，网关记录一条警告后继续启动，链路采集与 Web 配置功能不受影响。
+- 降级期间不发布北向数据，也不接收 NATS 控制命令或拓扑查询。NATS 服务恢复后需重启网关以重新初始化客户端。
 
 ### 5. 优雅退出
 
@@ -220,7 +228,10 @@ http://<设备IP>:8080
 | GET | `/api/realtime` | 实时数据快照 |
 | POST | `/api/set` | 下发/设置值 |
 | GET | `/api/logs` | 业务日志 |
-| GET | `/api/hardware` | 硬件接口映射 |
+| GET | `/api/comm-monitor` | 通讯报文与错误率监控 |
+| GET | `/api/hardware` | 接口映射 |
+| GET | `/api/settings` | 网关设置（应用配置与硬件映射） |
+| POST | `/api/settings` | 保存网关设置 |
 | GET | `/api/engine/status` | 链路 engine 运行状态快照 |
 | GET | `/api/syslog` | 系统日志快照 |
 | GET | `/api/syslog/stream` | 系统日志 SSE 实时推送 |
@@ -267,8 +278,9 @@ journalctl -u gateway -f
 | 端口 8080 被占用 | 用 `-addr :其他端口` 指定，或释放占用进程 |
 | 浏览器无法访问 | 确认设备防火墙放行对应端口，且用设备实际 IP 而非 `localhost` |
 | 交叉编译体积偏大 | 加 `-ldflags="-s -w" -trimpath` 去除符号与路径 |
-| 配置文件加载失败 | 服务会回退默认日志配置并打印警告，检查 YAML 缩进与路径 |
+| 设置保存失败 | 检查网关 ID、NATS 必填项、数值范围，以及硬件丝印和节点是否完整填写 |
 | 链路状态显示未连接 | 检查目标 IP/端口、串口设备节点、权限、设备是否在线；失败后 engine 每 3 秒重连 |
+| NATS 初始化失败 | 网关会继续运行但禁用 NATS 北向数据、命令和查询；检查 NATS 地址与服务状态后重启网关 |
 
 ---
 

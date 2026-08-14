@@ -1,4 +1,4 @@
-/* ══════════════ 日志监控 · Communication monitor ══════════════ */
+/* ══════════════ 报文信息 · Communication monitor ══════════════ */
 let logEvents = [];
 let logNextSeq = 0;
 let logTimer = null;

@@ -19,11 +19,23 @@ async function loadModels() {
     state.models = (rows || []).map(r => ({ id: (r.profile && r.profile.profileId) || r.id, profile: r.profile || {}, properties: r.properties || [] }));
   } catch (e) { state.models = []; }
 }
-async function loadHardware() {
+async function loadSettings() {
   try {
-    const hw = await apiGet('/hardware');
-    state.hardware = (hw && typeof hw === 'object') ? hw : DEFAULT_HARDWARE;
-  } catch (e) { state.hardware = DEFAULT_HARDWARE; }
+    const settings = await apiGet('/settings');
+    if (!settings || !settings.app || !settings.hardware) throw new Error('网关设置数据不完整');
+    state.settings = settings;
+    state.hardware = settings.hardware;
+  } catch (e) {
+    state.settings = null;
+    state.hardware = {};
+  }
+}
+async function loadSystemInfo() {
+  try {
+    state.systemInfo = await apiGet('/system-info');
+  } catch (e) {
+    state.systemInfo = null;
+  }
 }
 /* ── 链路持久化（/api/channels）── */
 function channelFromRow(r) {

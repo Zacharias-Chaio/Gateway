@@ -7,8 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gateway/internal/engine"
-	"gateway/internal/logx"
+	"gateway/internal/engine/connector"
 	"gateway/internal/store"
 
 	"github.com/go-chi/chi/v5"
@@ -33,7 +32,12 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "JSON 解析失败: "+err.Error())
 		return
 	}
-	// 冲突检测：同一串口/CAN 端口或网络 IP+端口不能被多个链路共用。
+	// 链路类型收窄：采集网关只支持串口与网络（Modbus RTU / TCP）。
+	if c.Type != connector.TypeSerial && c.Type != connector.TypeNetwork {
+		fail(w, http.StatusBadRequest, "链路类型只支持 Serial / Network，当前为 "+c.Type)
+		return
+	}
+	// 冲突检测：同一串口端口或网络 IP+端口不能被多个链路共用。
 	if key := channelResourceKey(c.Type, c.Config); key != "" {
 		var others []store.Channel
 		if err := s.DB.Where("id <> ?", c.ID).Find(&others).Error; err != nil {
@@ -42,7 +46,7 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, o := range others {
 			if channelResourceKey(o.Type, o.Config) == key {
-				fail(w, http.StatusConflict, "链路配置冲突：串口/CAN 端口或网络 IP+端口已被链路「"+o.Name+"」占用，不能被多个链路共用")
+				fail(w, http.StatusConflict, "链路配置冲突：串口端口或网络 IP+端口已被链路「"+o.Name+"」占用，不能被多个链路共用")
 				return
 			}
 		}
@@ -53,7 +57,7 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		s.reloadEngine()
+		s.notifyConfigChanged()
 		ok(w, c)
 		return
 	}
@@ -73,7 +77,7 @@ func (s *Server) SaveChannel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.reloadEngine()
+	s.notifyConfigChanged()
 	ok(w, c)
 }
 
@@ -93,31 +97,19 @@ func (s *Server) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "链路不存在: id="+strconv.Itoa(id))
 		return
 	}
-	s.reloadEngine()
+	s.notifyConfigChanged()
 	ok(w, map[string]int{"id": id})
 }
 
-// reloadEngine 拉取全量链路和设备模型，构建采集计划并触发引擎热重载；引擎未启用时静默跳过。
-func (s *Server) reloadEngine() {
-	if s.Engine == nil {
-		return
+// notifyConfigChanged 通知运行时配置已变更：由 gatewayruntime 从 PlanSource
+// 拉取全量链路 / 模型并触发引擎差量热重载。API 层不直接操作引擎。
+func (s *Server) notifyConfigChanged() {
+	if runtime, ok := s.Engine.(RuntimeFacade); ok {
+		runtime.ConfigChanged()
 	}
-	var channels []store.Channel
-	if err := s.DB.Order("id asc").Find(&channels).Error; err != nil {
-		return
-	}
-	var models []store.DeviceModel
-	if err := s.DB.Order("profile_index asc").Find(&models).Error; err != nil {
-		return
-	}
-	plans, warnings := engine.BuildPlans(channels, models)
-	for _, msg := range warnings {
-		logx.Module("api").Warn("采集计划警告", "warning", msg)
-	}
-	s.Engine.Apply(plans, models)
 }
 
-// channelResourceKey 提取链路占用的硬件资源唯一键：串口/CAN 以端口名唯一，
+// channelResourceKey 提取链路占用的硬件资源唯一键：串口以端口名唯一，
 // 网络以 IP+端口唯一。返回空串表示无可比较的资源占用，不参与冲突判断。
 func channelResourceKey(typ string, config []byte) string {
 	if len(config) == 0 {
@@ -125,7 +117,6 @@ func channelResourceKey(typ string, config []byte) string {
 	}
 	var cfg struct {
 		SerialName string          `json:"serialName"`
-		CanName    string          `json:"canName"`
 		DeviceIP   string          `json:"deviceIp"`
 		DevicePort json.RawMessage `json:"devicePort"`
 	}
@@ -136,10 +127,6 @@ func channelResourceKey(typ string, config []byte) string {
 	case "Serial":
 		if s := strings.TrimSpace(cfg.SerialName); s != "" {
 			return "Serial|" + strings.ToLower(s)
-		}
-	case "CAN":
-		if s := strings.TrimSpace(cfg.CanName); s != "" {
-			return "CAN|" + strings.ToLower(s)
 		}
 	case "Network":
 		ip := strings.TrimSpace(cfg.DeviceIP)

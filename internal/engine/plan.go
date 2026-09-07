@@ -5,25 +5,25 @@ import (
 	"fmt"
 
 	"gateway/internal/engine/converter"
-	"gateway/internal/store"
 )
 
-// 本文件定义采集计划的领域模型：将 store 层的扁平记录（Channel + DeviceModel）
+// 本文件定义采集计划的领域模型：将 PlanSource 提供的扁平配置（ChannelSpec + ModelSpec）
 // 转化为 engine 可直接执行的分层结构（ChannelPlan → DevicePlan → RegGroup）。
 //
 // 数据流向:
 //
-//	store.Channel ─┐
+//	ChannelSpec ──┐
 //	               ├─ BuildPlans ─► ChannelPlan
-//	store.DeviceModel ─┘                │
-//	                                    ├─ Devices[]: DevicePlan
-//	                                    │     ├─ UnitID (从站地址)
-//	                                    │     ├─ Converter (协议转换器)
-//	                                    │     └─ Groups[]: RegGroup (寄存器分组)
-//	                                    │           └─ Members[]: GroupMember (属性定位)
-//	                                    └─ PollInterval (轮询间隔)
+//	ModelSpec ───┘                   │
+//	                                   ├─ Devices[]: DevicePlan
+//	                                   │     ├─ Index（链路内序号：缓存键 / 写命令 / 遥测定位）
+//	                                   │     ├─ UnitID (从站地址)
+//	                                   │     ├─ Conv (协议转换器)
+//	                                   │     └─ Groups[]: RegGroup (寄存器分组)
+//	                                   │           └─ Members[]: GroupMember (属性定位)
+//	                                   └─ PollMs (轮询间隔)
 
-// DeviceMount 描述挂载在链路上的单个设备（从 store.Channel.Devices JSON 解析）。
+// DeviceMount 描述挂载在链路上的单个设备（从 ChannelSpec.Devices JSON 解析）。
 type DeviceMount struct {
 	Index   int    `json:"index"`   // 设备序号
 	CommNo  int    `json:"commNo"`  // 从站地址 / 单元 ID
@@ -33,6 +33,7 @@ type DeviceMount struct {
 
 // DevicePlan 是一个设备的采集执行计划。
 type DevicePlan struct {
+	Index     int                  // 设备在链路内的序号（缓存键、写命令与遥测定位使用）
 	UnitID    byte                 // 从站地址
 	Name      string               // 设备名称（用户填写，日志/展示用）
 	ModelID   string               // 设备模型 ID
@@ -55,16 +56,16 @@ func (d *DevicePlan) DisplayName() string {
 type ChannelPlan struct {
 	ChannelID   int    // 链路 ID
 	ChannelName string // 链路名称
-	ChannelType string // 链路类型（Serial / Network / CAN）
+	ChannelType string // 链路类型（Serial / Network）
 	Config      []byte // 链路配置 JSON（透传给 connector.ParseConfig）
 	Devices     []DevicePlan
 	PollMs      int // 轮询间隔（毫秒），0 表示默认
 }
 
-// BuildPlans 将 store 层的链路 + 设备模型转化为引擎可执行的采集计划。
-// 无法解析的设备/模型会被跳过并记录原因（返回的 error 仅用于日志）。
-func BuildPlans(channels []store.Channel, models []store.DeviceModel) ([]ChannelPlan, []string) {
-	modelMap := make(map[string]store.DeviceModel, len(models))
+// BuildPlans 将配置源提供的链路 + 设备模型转化为引擎可执行的采集计划。
+// 无法解析的设备/模型会被跳过并记录原因（返回的 warnings 仅用于日志）。
+func BuildPlans(channels []ChannelSpec, models []ModelSpec) ([]ChannelPlan, []string) {
+	modelMap := make(map[string]ModelSpec, len(models))
 	for _, m := range models {
 		modelMap[m.ID] = m
 	}
@@ -84,7 +85,7 @@ func BuildPlans(channels []store.Channel, models []store.DeviceModel) ([]Channel
 }
 
 // buildChannelPlan 构建单条链路的采集计划。
-func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (*ChannelPlan, []string) {
+func buildChannelPlan(ch ChannelSpec, modelMap map[string]ModelSpec) (*ChannelPlan, []string) {
 	var warns []string
 
 	// 解析链路挂载的设备列表。
@@ -123,6 +124,7 @@ func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (
 		}
 		dp.Name = mt.Name
 		dp.ModelID = mt.ModelID
+		dp.Index = len(plan.Devices) // 链路内序号，作为缓存键与 API 定位标识
 		plan.Devices = append(plan.Devices, *dp)
 	}
 
@@ -133,7 +135,7 @@ func buildChannelPlan(ch store.Channel, modelMap map[string]store.DeviceModel) (
 }
 
 // buildDevicePlan 从设备模型构建单个设备的采集计划。
-func buildDevicePlan(model store.DeviceModel, commNo int) (*DevicePlan, error) {
+func buildDevicePlan(model ModelSpec, commNo int) (*DevicePlan, error) {
 	if commNo < 1 || commNo > 247 {
 		return nil, fmt.Errorf("模型 %q 的 Modbus 通讯号必须介于 1 和 247", model.Name)
 	}
@@ -144,7 +146,7 @@ func buildDevicePlan(model store.DeviceModel, commNo int) (*DevicePlan, error) {
 		MaxRegisterCount *int   `json:"maxRegisterCount"`
 	}
 	if err := json.Unmarshal(model.Profile, &profile); err != nil {
-		return nil, fmt.Errorf("模型 Profile 解析失败: %w", err)
+		return nil, fmt.Errorf("模型 %q Profile 解析失败: %w", model.Name, err)
 	}
 	proto := profile.ProtocolType
 	if proto == "" {

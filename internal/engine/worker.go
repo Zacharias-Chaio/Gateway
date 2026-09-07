@@ -178,6 +178,26 @@ func (w *worker) publishWriteResult(cmd WriteCommand, err error) {
 	w.sink.PublishWriteResult(event)
 }
 
+// errLinkStopped 表示 worker 已退出，队列中的写命令不会被执行。
+var errLinkStopped = errors.New("链路已停止，写命令未执行")
+
+// drainPendingWrites 在 worker 退出前排空写命令队列：
+// 对带 RequestID 的命令（消息总线来源）发布失败回执，避免调用方永远等不到 cmdAck。
+// worker 退出前已从引擎活动表移除，不再有新命令入队；仅存在极小的在途投递窗口。
+func (w *worker) drainPendingWrites() {
+	for {
+		select {
+		case cmd := <-w.writeCh:
+			if cmd.RequestID == "" {
+				continue // HTTP 来源命令无回执通道，直接丢弃
+			}
+			w.publishWriteResult(cmd, errLinkStopped)
+		default:
+			return
+		}
+	}
+}
+
 // run 是链路主循环：连接（失败后按 reconnectRetries 策略重连）→ 采集循环 → ctx 取消则关闭退出。
 func (w *worker) run(ctx context.Context) {
 	defer close(w.done)
@@ -187,6 +207,8 @@ func (w *worker) run(ctx context.Context) {
 		}
 		w.setConnected(false, "")
 	}()
+	// LIFO：drain 最先执行，保证 stop() 等到 done 关闭时回执已全部发出。
+	defer w.drainPendingWrites()
 
 	const reconnectInterval = 3 * time.Second
 	connectAttempts := 0 // 已尝试的连接次数（用于 reconnectRetries 判断）
@@ -283,14 +305,14 @@ func (w *worker) collectLoop(ctx context.Context) bool {
 			dev := &w.plan.Devices[devIdx%len(w.plan.Devices)]
 			if err := w.pollDevice(ctx, dev); err != nil {
 				w.log.Warn("设备轮询失败", "channel", w.name, "device", dev.DisplayName(), "err", err)
-				w.setOnline(devIndexByName(w.plan, dev), false)
-				w.publishTelemetry(devIndexByName(w.plan, dev), false)
+				w.setOnline(dev.Index, false)
+				w.publishTelemetry(dev.Index, false)
 				if isLinkError(err) {
 					return true
 				}
 			} else {
-				w.setOnline(devIndexByName(w.plan, dev), true)
-				w.publishTelemetry(devIndexByName(w.plan, dev), true)
+				w.setOnline(dev.Index, true)
+				w.publishTelemetry(dev.Index, true)
 			}
 			devIdx++
 		}
@@ -334,7 +356,7 @@ func (w *worker) pollDevice(ctx context.Context, dev *DevicePlan) error {
 // resendRetries 控制单帧发送失败后的重试次数（0 = 不重试，发一次即返回错误）。
 func (w *worker) pollOne(ctx context.Context, dev *DevicePlan, gi int) error {
 	g := dev.Groups[gi]
-	deviceIndex := devIndexByName(w.plan, dev)
+	deviceIndex := dev.Index
 	transactionStarted := time.Now()
 
 	// 组装读请求
@@ -592,7 +614,7 @@ func cacheKey(devIdx int, propName string) string {
 
 // logTX 记录发送报文（Debug 级），便于通信排障。
 func (w *worker) logTX(dev *DevicePlan, operation string, attempt int, p []byte) {
-	w.monitor.tx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p)
+	w.monitor.tx(dev.Index, dev.UnitID, operation, attempt, p)
 	w.log.Debug("TX 发送报文",
 		"channel", w.name, "device", dev.DisplayName(),
 		"hex", fmt.Sprintf("% x", p), "len", len(p))
@@ -600,7 +622,7 @@ func (w *worker) logTX(dev *DevicePlan, operation string, attempt int, p []byte)
 
 // logRX 记录接收报文（Debug 级），便于通信排障。
 func (w *worker) logRX(dev *DevicePlan, operation string, attempt int, p []byte, latency time.Duration) {
-	w.monitor.rx(devIndexByName(w.plan, dev), dev.UnitID, operation, attempt, p, latency)
+	w.monitor.rx(dev.Index, dev.UnitID, operation, attempt, p, latency)
 	w.log.Debug("RX 接收报文",
 		"channel", w.name, "device", dev.DisplayName(),
 		"hex", fmt.Sprintf("% x", p), "len", len(p))
@@ -680,16 +702,6 @@ func (w *worker) publishOfflineUntilStopped(ctx context.Context) {
 			w.publishAllOffline()
 		}
 	}
-}
-
-// devIndexByName 在 plan 中查找设备的序号（指针比较）。
-func devIndexByName(plan ChannelPlan, dev *DevicePlan) int {
-	for i := range plan.Devices {
-		if &plan.Devices[i] == dev {
-			return i
-		}
-	}
-	return 0
 }
 
 // isLinkError 判断错误是否需要重连（底层连接断开）。

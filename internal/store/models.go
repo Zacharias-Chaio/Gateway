@@ -21,7 +21,7 @@ type DeviceModel struct {
 type Channel struct {
 	ID        int            `gorm:"primaryKey" json:"id"` // 通道ID，从 0 开始
 	Name      string         `json:"name"`
-	Type      string         `json:"type"` // Serial/Network/CAN
+	Type      string         `json:"type"` // Serial/Network
 	Config    datatypes.JSON `json:"config"`
 	Devices   datatypes.JSON `json:"devices"` // 挂载设备列表：[{index, commNo, modelId}]
 	CreatedAt time.Time      `json:"-"`

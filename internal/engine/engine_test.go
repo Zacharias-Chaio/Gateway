@@ -7,11 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"gorm.io/datatypes"
-
 	"gateway/internal/engine/connector"
 	"gateway/internal/engine/converter"
-	"gateway/internal/store"
 )
 
 // waitFor 轮询直到 cond 为真或超时。
@@ -27,19 +24,19 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 	return cond()
 }
 
-func networkChannel(id int, name, ip string, port int) store.Channel {
+func networkChannel(id int, name, ip string, port int) ChannelSpec {
 	cfg := `{"deviceIp":"` + ip + `","devicePort":` + itoa(port) + `}`
-	return store.Channel{ID: id, Name: name, Type: connector.TypeNetwork, Config: datatypes.JSON(cfg)}
+	return ChannelSpec{ID: id, Name: name, Type: connector.TypeNetwork, Config: []byte(cfg)}
 }
 
-// toPlan 将 store.Channel 转换为最小可执行的 ChannelPlan（无设备，仅维持连接）。
-func toPlan(ch store.Channel) ChannelPlan {
+// toPlan 将 ChannelSpec 转换为最小可执行的 ChannelPlan（无设备，仅维持连接）。
+func toPlan(ch ChannelSpec) ChannelPlan {
 	return ChannelPlan{
 		ChannelID:   ch.ID,
 		ChannelName: ch.Name,
 		ChannelType: ch.Type,
 		Config:      ch.Config,
-		PollMs:      0, // 默认 1 秒
+		PollMs:      0, // 默认 500ms
 	}
 }
 
@@ -86,7 +83,7 @@ func TestEngineApplyStartStop(t *testing.T) {
 
 	// 启动一条链路。
 	ch := networkChannel(1, "链路A", host, port)
-	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
+	eng.Apply([]ChannelPlan{toPlan(ch)})
 	if !waitFor(t, 2*time.Second, func() bool {
 		st := eng.Status()
 		return len(st) == 1 && st[0].Connected
@@ -95,13 +92,13 @@ func TestEngineApplyStartStop(t *testing.T) {
 	}
 
 	// 相同配置再次 Apply：不应重启（worker 指纹未变，仍连接）。
-	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
+	eng.Apply([]ChannelPlan{toPlan(ch)})
 	if st := eng.Status(); len(st) != 1 {
 		t.Fatalf("重复 Apply 后链路数错误: %d", len(st))
 	}
 
 	// 删除链路：worker 应被停止移除。
-	eng.Apply(nil, nil)
+	eng.Apply(nil)
 	if !waitFor(t, 2*time.Second, func() bool {
 		return len(eng.Status()) == 0
 	}) {
@@ -109,8 +106,8 @@ func TestEngineApplyStartStop(t *testing.T) {
 	}
 }
 
-// TestEngineUnsupportedSkipped 验证不支持的链路（CAN Open 失败）不会导致引擎崩溃，
-// 且 worker 记录未连接状态。
+// TestEngineUnsupportedSkipped 验证不支持的链路类型（如历史 CAN 或未知类型）
+// 在驱动创建阶段被跳过并记录警告，不会创建 worker，也不影响引擎运行。
 func TestEngineUnsupportedSkipped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -118,15 +115,11 @@ func TestEngineUnsupportedSkipped(t *testing.T) {
 	eng := New(ctx)
 	defer eng.Stop()
 
-	ch := store.Channel{ID: 7, Name: "CAN链路", Type: connector.TypeCAN, Config: datatypes.JSON(`{"canName":"can0","canBaud":250000}`)}
-	eng.Apply([]ChannelPlan{toPlan(ch)}, nil)
+	ch := ChannelSpec{ID: 7, Name: "CAN链路", Type: "CAN", Config: []byte(`{"canName":"can0"}`)}
+	eng.Apply([]ChannelPlan{toPlan(ch)})
 
-	// worker 会创建但 Open 持续失败（ErrNotSupported），状态应为未连接。
-	if !waitFor(t, time.Second, func() bool {
-		st := eng.Status()
-		return len(st) == 1 && !st[0].Connected && st[0].LastError != ""
-	}) {
-		t.Fatalf("CAN 链路状态不符合预期: %+v", eng.Status())
+	if st := eng.Status(); len(st) != 0 {
+		t.Fatalf("不支持的链路类型应被跳过: %+v", st)
 	}
 }
 
@@ -150,7 +143,7 @@ func TestEngineStopInterruptsBlockedReceive(t *testing.T) {
 		UnitID: 1, ModelName: "设备A", Conv: blockingFrameIO{},
 		Groups: []converter.RegGroup{{ReadFC: 3, StartAddr: 0, Quantity: 1}},
 	}}
-	eng.Apply([]ChannelPlan{plan}, nil)
+	eng.Apply([]ChannelPlan{plan})
 	if !waitFor(t, time.Second, func() bool {
 		status := eng.Status()
 		return len(status) == 1 && status[0].Connected
@@ -168,6 +161,7 @@ func TestEngineStopInterruptsBlockedReceive(t *testing.T) {
 type telemetrySink struct {
 	mu     sync.Mutex
 	events []TelemetryEvent
+	writes []WriteResultEvent
 }
 
 func (s *telemetrySink) PublishTelemetry(event TelemetryEvent) {
@@ -176,7 +170,46 @@ func (s *telemetrySink) PublishTelemetry(event TelemetryEvent) {
 	s.mu.Unlock()
 }
 
-func (*telemetrySink) PublishWriteResult(WriteResultEvent) {}
+func (s *telemetrySink) PublishWriteResult(event WriteResultEvent) {
+	s.mu.Lock()
+	s.writes = append(s.writes, event)
+	s.mu.Unlock()
+}
+
+func (s *telemetrySink) writeResults() []WriteResultEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]WriteResultEvent, len(s.writes))
+	copy(out, s.writes)
+	return out
+}
+
+// TestWorkerDrainPendingWritesPublishesFailure 验证 worker 退出前排空写队列：
+// 带 RequestID 的命令（消息总线来源）必须收到失败回执，HTTP 来源命令静默丢弃。
+func TestWorkerDrainPendingWritesPublishesFailure(t *testing.T) {
+	sink := &telemetrySink{}
+	worker := newWorker(1, "链路A", "", connector.Config{}, nil, ChannelPlan{}, sink)
+	worker.writeCh <- WriteCommand{RequestID: "req-1", DeviceIndex: 0, PropName: "频率", RawValue: 50}
+	worker.writeCh <- WriteCommand{RequestID: "req-2", DeviceIndex: 0, PropName: "电压", RawValue: 220}
+	worker.writeCh <- WriteCommand{DeviceIndex: 0, PropName: "电流", RawValue: 5} // 无 RequestID
+
+	worker.drainPendingWrites()
+
+	results := sink.writeResults()
+	if len(results) != 2 {
+		t.Fatalf("应为两条带 RequestID 的命令发布失败回执: got %d", len(results))
+	}
+	seen := map[string]bool{}
+	for _, r := range results {
+		if r.OK || r.Error == "" || r.ChannelID != 1 {
+			t.Fatalf("回执应为失败且携带原因: %+v", r)
+		}
+		seen[r.RequestID] = true
+	}
+	if !seen["req-1"] || !seen["req-2"] {
+		t.Fatalf("回执 RequestID 不完整: %+v", results)
+	}
+}
 
 func TestWorkerPublishAllOffline(t *testing.T) {
 	sink := &telemetrySink{}
@@ -247,10 +280,10 @@ func TestWorkerPublishesOfflineAfterReconnectAttemptsExhausted(t *testing.T) {
 
 func TestBuildPlansPreservesFrontendPropertyID(t *testing.T) {
 	properties := `[{"id":"voltage","name":"电压","dataType":"int","readFunctionCode":3,"registerBase":0,"registerOffset":0,"startBit":0,"endBit":15,"accessMode":"r"}]`
-	model := store.DeviceModel{
+	model := ModelSpec{
 		ID: "model-1", Name: "设备模型",
-		Profile:    datatypes.JSON(`{"protocolType":"Modbus TCP"}`),
-		Properties: datatypes.JSON(properties),
+		Profile:    []byte(`{"protocolType":"Modbus TCP"}`),
+		Properties: []byte(properties),
 	}
 	devices := []DeviceMount{{Index: 0, CommNo: 1, ModelID: model.ID}}
 	deviceJSON, err := json.Marshal(devices)
@@ -258,14 +291,17 @@ func TestBuildPlansPreservesFrontendPropertyID(t *testing.T) {
 		t.Fatalf("编码设备挂载: %v", err)
 	}
 	channel := networkChannel(1, "链路A", "127.0.0.1", 502)
-	channel.Devices = datatypes.JSON(deviceJSON)
+	channel.Devices = deviceJSON
 
-	plans, warnings := BuildPlans([]store.Channel{channel}, []store.DeviceModel{model})
+	plans, warnings := BuildPlans([]ChannelSpec{channel}, []ModelSpec{model})
 	if len(warnings) != 0 || len(plans) != 1 || len(plans[0].Devices) != 1 {
 		t.Fatalf("采集计划构建失败: plans=%+v warnings=%v", plans, warnings)
 	}
 	props := plans[0].Devices[0].Props
 	if len(props) != 1 || props[0].PropID != "voltage" {
 		t.Fatalf("前端属性 ID 未保留: %+v", props)
+	}
+	if plans[0].Devices[0].Index != 0 {
+		t.Fatalf("设备链路内序号错误: %+v", plans[0].Devices[0])
 	}
 }

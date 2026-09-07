@@ -72,8 +72,8 @@ type messageData struct {
 
 type propVal struct {
 	Name      string `json:"name"`
-	Value     any   `json:"value"`
-	Timestamp int64 `json:"timestamp"`
+	Value     any    `json:"value"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 type messageCmd struct {

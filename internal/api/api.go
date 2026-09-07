@@ -10,7 +10,6 @@ import (
 	"gateway/internal/config"
 	"gateway/internal/engine"
 	"gateway/internal/logx"
-	"gateway/internal/store"
 
 	"gorm.io/gorm"
 )
@@ -24,10 +23,8 @@ type Server struct {
 }
 
 // EngineFacade 汇总引擎对 API 层暴露的全部能力，
-// 由 engine.Engine 实现。接口化以避免 api 直接依赖引擎内部细节。
+// 由运行时管理器实现。接口化以避免 api 直接依赖引擎内部细节。
 type EngineFacade interface {
-	// Apply 以给定采集计划集合为期望状态做差量启停。
-	Apply(plans []engine.ChannelPlan, models []store.DeviceModel)
 	// Submit 投递一条写命令。
 	Submit(channelID int, cmd engine.WriteCommand) bool
 	// Values 返回指定链路的实时值快照。
@@ -41,6 +38,8 @@ type RuntimeFacade interface {
 	EngineFacade
 	Restart() bool
 	Status() any
+	// ConfigChanged 通知配置（模型 / 链路）已保存，由运行时拉取最新配置并热重载引擎。
+	ConfigChanged()
 }
 
 func New(db *gorm.DB) *Server {

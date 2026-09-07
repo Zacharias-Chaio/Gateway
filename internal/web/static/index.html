@@ -203,7 +203,6 @@
                       <option value="">请选择接口类型</option>
                       <option value="Serial">串口</option>
                       <option value="Network">网络</option>
-                      <option value="CAN">CAN</option>
                     </select>
                     <div class="invalid-feedback">请选择接口类型</div>
                   </div>
@@ -307,7 +306,7 @@
         <div id="channel-landing">
           <div class="section-header">
             <h4><i class="bi bi-diagram-3 me-2" style="color:var(--primary)"></i>链路配置</h4>
-            <div class="sub">配置嵌入式设备的 IO 通道（串口 / 网络 / CAN）并挂载采集设备，导出链路配置 JSON</div>
+            <div class="sub">配置嵌入式设备的 IO 通道（串口 / 网络）并挂载采集设备，导出链路配置 JSON</div>
           </div>
           <div class="landing-toolbar mt-3">
             <span class="count-pill">已配置 <span id="channel-count" class="fw-semibold">0</span> 个链路</span>
@@ -354,7 +353,7 @@
 
                 <div class="info-banner">
                   <i class="bi bi-info-circle-fill me-2" style="color:var(--primary)"></i>
-                  <span class="text-muted">链路用于配置嵌入式设备的 <span class="fw-semibold">IO 通道</span>（串口 / 网络 / CAN）相关属性。</span>
+                  <span class="text-muted">链路用于配置嵌入式设备的 <span class="fw-semibold">IO 通道</span>（串口 / 网络）相关属性。</span>
                 </div>
 
                 <form id="form-channel" novalidate>
@@ -375,7 +374,6 @@
                         <option value="">请选择</option>
                         <option value="Serial">串口通道</option>
                         <option value="Network">网络通道</option>
-                        <option value="CAN">CAN通道</option>
                       </select>
                       <div class="invalid-feedback">请选择通道类型</div>
                     </div>
@@ -445,24 +443,6 @@
                       <div class="col-md-6">
                         <label class="form-label fw-semibold">目标端口</label>
                         <input type="number" min="1" max="65535" class="form-control" id="ch-devicePort" placeholder="如 502">
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- CAN 参数 -->
-                  <div id="ch-grp-can" class="d-none">
-                    <div class="form-section-divider"><span><i class="bi bi-hdd-network me-1"></i>CAN 参数</span></div>
-                    <div class="row g-3">
-                      <div class="col-md-6">
-                        <label class="form-label fw-semibold">CAN名称</label>
-                        <select class="form-select" id="ch-canName"></select>
-                      </div>
-                      <div class="col-md-6">
-                        <label class="form-label fw-semibold">波特率</label>
-                        <select class="form-select" id="ch-canBaud">
-                          <option value="125000">125 kbps</option><option value="250000" selected>250 kbps</option>
-                          <option value="500000">500 kbps</option><option value="1000000">1 Mbps</option>
-                        </select>
                       </div>
                     </div>
                   </div>

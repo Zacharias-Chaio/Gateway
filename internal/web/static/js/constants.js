@@ -2,16 +2,15 @@
 const TOTAL_STEPS = 3;
 const CH_TOTAL_STEPS = 3;
 const PROTOCOLS_BY_INTERFACE = {
-  Serial: ['Modbus RTU', 'IEC103', 'DL/T 645-1997', 'DL/T 645-2007', '自定义协议'],
-  Network: ['Modbus TCP', 'Modbus RTU', 'IEC103', 'IEC104', 'IEC61850', 'OPC UA', 'MQTT', 'HTTP/HTTPS', '自定义协议'],
-  CAN: ['CAN协议', '自定义协议']
+  Serial: ['Modbus RTU'],
+  Network: ['Modbus TCP', 'Modbus RTU']
 };
 const DT_LABEL = { bool:'布尔', int:'整数', float:'浮点数', string:'字符串' };
 const DT_FROM_LABEL = Object.fromEntries(Object.entries(DT_LABEL).map(([k, v]) => [v, k]));
 const ACCESS_LABEL = { r:'只读', w:'只写', rw:'读写' };
 const ACCESS_FROM_LABEL = { '只读':'r', '只写':'w', '读写':'rw', 'R':'r', 'W':'w', 'RW':'rw', 'r':'r', 'w':'w', 'rw':'rw' };
-const CHANNEL_TYPE_LABEL = { Serial:'串口通道', Network:'网络通道', CAN:'CAN通道' };
-const CHANNEL_TYPE_ICON = { Serial:'usb-symbol', Network:'ethernet', CAN:'hdd-network' };
+const CHANNEL_TYPE_LABEL = { Serial:'串口通道', Network:'网络通道' };
+const CHANNEL_TYPE_ICON = { Serial:'usb-symbol', Network:'ethernet' };
 const PARITY_LABEL = { None:'无', Even:'偶校验', Odd:'奇校验' };
 const CSV_HEADERS = ['属性ID','属性名称','属性描述','数据类型','起始位','终止位','读写属性','偏移量','数据系数','数据单位','读功能码','写功能码','寄存器基址','寄存器偏移','字节顺序'];
 const CSV_FIELD_MAP = {

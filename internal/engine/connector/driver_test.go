@@ -3,26 +3,16 @@ package connector
 import (
 	"testing"
 
-	"gorm.io/datatypes"
-
-	"gateway/internal/store"
-
 	"go.bug.st/serial"
 )
 
 // TestParseConfigSerial 验证串口链路 JSON 解析与字段映射。
 func TestParseConfigSerial(t *testing.T) {
-	ch := store.Channel{
-		ID:   1,
-		Name: "串口A",
-		Type: TypeSerial,
-		Config: datatypes.JSON(`{
+	cfg, err := ParseConfig(TypeSerial, []byte(`{
 			"serialName":"/dev/ttyS1","baudRate":9600,"dataBits":8,
 			"parity":"Even","stopBits":1,"frameInterval":50,
 			"reconnectRetries":3,"resendRetries":2,"pollInterval":1000
-		}`),
-	}
-	cfg, err := ParseConfig(ch)
+		}`))
 	if err != nil {
 		t.Fatalf("解析失败: %v", err)
 	}
@@ -45,11 +35,7 @@ func TestParseConfigSerial(t *testing.T) {
 
 // TestParseConfigNetworkTarget 验证网络链路目标地址拼装。
 func TestParseConfigNetworkTarget(t *testing.T) {
-	ch := store.Channel{
-		Type:   TypeNetwork,
-		Config: datatypes.JSON(`{"deviceIp":"192.168.1.10","devicePort":502}`),
-	}
-	cfg, err := ParseConfig(ch)
+	cfg, err := ParseConfig(TypeNetwork, []byte(`{"deviceIp":"192.168.1.10","devicePort":502}`))
 	if err != nil {
 		t.Fatalf("解析失败: %v", err)
 	}

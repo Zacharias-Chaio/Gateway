@@ -67,7 +67,7 @@ function fillProfileForm() {
 
 /* ══════════════ Project import / export (整体) ══════════════ */
 /* ══════════════ Device model landing (multi-model) ══════════════ */
-const IFACE_LABEL = { Serial:'串口', Network:'网络', CAN:'CAN' };
+const IFACE_LABEL = { Serial:'串口', Network:'网络' };
 function ifaceLabel(v) { return IFACE_LABEL[v] || v || '—'; }
 function emptyProfile() { return { profileIndex:null, profileId:'', name:'', manufacturer:'', description:'', deviceType:'', deviceModel:'', ratedPower:null, interfaceType:'', protocolType:'', protocolVersion:'', maxRegisterCount: 100 }; }
 function nextProfileIndex() { let n = 0; while (state.models.some(m => m.profile && String(m.profile.profileIndex) === String(n))) n++; return n; }

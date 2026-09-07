@@ -14,17 +14,15 @@ import (
 	"gateway/internal/engine"
 	"gateway/internal/engine/converter"
 	"gateway/internal/logx"
-	"gateway/internal/store"
 
 	"github.com/nats-io/nats.go"
-	"gorm.io/gorm"
 )
 
 // Client publishes engine events and serves the cmd and query subjects.
 type Client struct {
 	config       config.NATS
 	gateway      string
-	db           *gorm.DB
+	source       engine.PlanSource
 	engine       *engine.Engine
 	log          *slog.Logger
 	conn         *nats.Conn
@@ -39,7 +37,8 @@ type Client struct {
 }
 
 // New connects to NATS and starts the event publisher and request subscriptions.
-func New(ctx context.Context, gateway string, cfg config.NATS, db *gorm.DB, eng *engine.Engine) (*Client, error) {
+// source 提供链路与设备模型配置（拓扑查询用），北向客户端不直接依赖存储层。
+func New(ctx context.Context, gateway string, cfg config.NATS, source engine.PlanSource, eng *engine.Engine) (*Client, error) {
 	if gateway == "" || strings.Contains(gateway, ".") {
 		return nil, fmt.Errorf("无效 gateway.gw_id")
 	}
@@ -48,7 +47,7 @@ func New(ctx context.Context, gateway string, cfg config.NATS, db *gorm.DB, eng 
 	}
 	prefix := strings.TrimSuffix(cfg.SubjectPrefix, ".") + "." + gateway
 	client := &Client{
-		config: cfg, gateway: gateway, db: db, engine: eng, log: logx.Module("nats"),
+		config: cfg, gateway: gateway, source: source, engine: eng, log: logx.Module("nats"),
 		data: prefix + ".data", cmd: prefix + ".cmd", query: prefix + ".query",
 		events: make(chan any, queueSize(cfg.QueueSize)), done: make(chan struct{}),
 	}
@@ -248,15 +247,15 @@ func (c *Client) respondQuery(msg *nats.Msg, response messageQueryResp) {
 }
 
 func (c *Client) topology() ([]channelInfo, error) {
-	var channels []store.Channel
-	if err := c.db.Order("id asc").Find(&channels).Error; err != nil {
+	channels, err := c.source.LoadChannels(context.Background())
+	if err != nil {
 		return nil, fmt.Errorf("读取链路: %w", err)
 	}
-	var models []store.DeviceModel
-	if err := c.db.Find(&models).Error; err != nil {
+	models, err := c.source.LoadModels(context.Background())
+	if err != nil {
 		return nil, fmt.Errorf("读取设备模型: %w", err)
 	}
-	modelMap := make(map[string]store.DeviceModel, len(models))
+	modelMap := make(map[string]engine.ModelSpec, len(models))
 	for _, model := range models {
 		modelMap[model.ID] = model
 	}

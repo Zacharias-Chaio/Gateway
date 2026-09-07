@@ -30,3 +30,14 @@ func Open(path string) (*gorm.DB, error) {
 	}
 	return db, nil
 }
+
+// LegacyChannelCAN 是历史版本支持的 CAN 链路类型。采集业务已收窄为
+// Modbus 串口 / 网络，启动时物理删除该类型的历史链路记录。
+const LegacyChannelCAN = "CAN"
+
+// DeleteUnsupportedChannels 物理删除采集引擎不再支持的链路记录（当前为 CAN），
+// 返回删除的行数。属于一次性破坏性迁移，供 main 启动时调用。
+func DeleteUnsupportedChannels(db *gorm.DB) (int64, error) {
+	res := db.Where("type = ?", LegacyChannelCAN).Delete(&Channel{})
+	return res.RowsAffected, res.Error
+}

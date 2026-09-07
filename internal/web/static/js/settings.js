@@ -33,8 +33,7 @@ const SETTINGS_CARDS = [
 
 const HARDWARE_CATEGORY_META = {
   Serial: { label: '串口接口', icon: 'usb-symbol' },
-  Ethernet: { label: '以太网接口', icon: 'ethernet' },
-  CAN: { label: 'CAN 接口', icon: 'hdd-network' }
+  Ethernet: { label: '以太网接口', icon: 'ethernet' }
 };
 
 function fieldID(path) { return 'setting-' + path.replaceAll('.', '-'); }

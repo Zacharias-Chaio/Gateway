@@ -1,13 +1,12 @@
 /* ══════════════ 链路配置 · Channels ══════════════ */
 function emptyChannel() {
   return { id: 0, name:'', type:'', reconnectRetries:'0', resendRetries:'3', pollInterval:'500', serialName:'', baudRate:'9600', dataBits:'8', parity:'None', stopBits:'1',
-    deviceIp:'', devicePort:'', canName:'', canBaud:'250000', devices: [] };
+    deviceIp:'', devicePort:'', devices: [] };
 }
 function onChannelTypeChange() {
   const t = document.getElementById('ch-type').value;
   document.getElementById('ch-grp-serial').classList.toggle('d-none', t !== 'Serial');
   document.getElementById('ch-grp-network').classList.toggle('d-none', t !== 'Network');
-  document.getElementById('ch-grp-can').classList.toggle('d-none', t !== 'CAN');
   fillHardwareSelects();
 }
 function hwOptionsHtml(category, selected) {
@@ -26,9 +25,7 @@ function hwOptionsHtml(category, selected) {
 function fillHardwareSelects() {
   const c = state.channel || {};
   const s = document.getElementById('ch-serialName');
-  const k = document.getElementById('ch-canName');
   if (s) s.innerHTML = hwOptionsHtml('Serial', c.serialName);
-  if (k) k.innerHTML = hwOptionsHtml('CAN', c.canName);
 }
 function hwNode(category, key) {
   if (!key) return '';
@@ -139,17 +136,13 @@ function validateChannelDevices(report = true) {
   }
   return ok;
 }
-// 生成链路占用的硬件资源唯一键：串口 / CAN 以端口名唯一，网络以 IP+端口 唯一。
+// 生成链路占用的硬件资源唯一键：串口以端口名唯一，网络以 IP+端口 唯一。
 // 返回 null 表示当前配置缺少可比较的资源标识，不参与冲突判断。
 function channelConflictKey(c) {
   if (!c) return null;
   if (c.type === 'Serial') {
     const s = (c.serialName || '').trim();
     return s ? { kind: 'Serial', key: s.toLowerCase(), label: `串口 ${s}` } : null;
-  }
-  if (c.type === 'CAN') {
-    const s = (c.canName || '').trim();
-    return s ? { kind: 'CAN', key: s.toLowerCase(), label: `CAN ${s}` } : null;
   }
   if (c.type === 'Network') {
     const ip = (c.deviceIp || '').trim();
@@ -158,7 +151,7 @@ function channelConflictKey(c) {
   }
   return null;
 }
-// 冲突检测：同一串口 / CAN 端口，或同一网络 IP+端口，不能被多个链路共用。
+// 冲突检测：同一串口端口，或同一网络 IP+端口，不能被多个链路共用。
 function validateChannelConflict(report = true) {
   const key = channelConflictKey(state.channel);
   if (!key) return true; // 缺少可比较的唯一标识时不拦截
@@ -166,7 +159,7 @@ function validateChannelConflict(report = true) {
     if (i === channelEditIndex) continue; // 跳过正在编辑的链路自身
     const other = channelConflictKey(state.channels[i]);
     if (other && other.kind === key.kind && other.key === key.key) {
-      if (report) alert(`链路配置冲突：${key.label} 已被链路「${state.channels[i].name || '未命名链路'}」占用，同一串口 / CAN 端口或网络 IP+端口 不能被多个链路共用。`);
+      if (report) alert(`链路配置冲突：${key.label} 已被链路「${state.channels[i].name || '未命名链路'}」占用，同一串口端口或网络 IP+端口 不能被多个链路共用。`);
       return false;
     }
   }
@@ -210,7 +203,6 @@ function fillChannelForm() {
   setVal('ch-baud', c.baudRate); setVal('ch-dataBits', c.dataBits);
   setVal('ch-parity', c.parity); setVal('ch-stopBits', c.stopBits);
   setVal('ch-deviceIp', c.deviceIp); setVal('ch-devicePort', c.devicePort);
-  setVal('ch-canBaud', c.canBaud);
   normalizeChannelDevices(state.channel);
   renderChannelDeviceTable();
   onChannelTypeChange();
@@ -222,7 +214,6 @@ function syncChannelFromForm() {
   c.reconnectRetries = val('ch-reconnectRetries'); c.resendRetries = val('ch-resendRetries'); c.pollInterval = val('ch-pollInterval');
   c.serialName = val('ch-serialName'); c.baudRate = val('ch-baud'); c.dataBits = val('ch-dataBits'); c.parity = val('ch-parity'); c.stopBits = val('ch-stopBits');
   c.deviceIp = val('ch-deviceIp'); c.devicePort = val('ch-devicePort');
-  c.canName = val('ch-canName'); c.canBaud = val('ch-canBaud');
   c.devices = readChannelDeviceRows();
 }
 function validateChannelStep1() {
@@ -288,7 +279,6 @@ function buildChannelConfig(c) {
     devices };
   if (c.type === 'Serial') Object.assign(base, { serialName: hwNode('Serial', c.serialName), baudRate: toNum(c.baudRate, null), dataBits: toNum(c.dataBits, null), parity: c.parity, stopBits: c.stopBits });
   if (c.type === 'Network') Object.assign(base, { deviceIp: c.deviceIp, devicePort: c.devicePort === '' ? null : toNum(c.devicePort, null) });
-  if (c.type === 'CAN') Object.assign(base, { canName: hwNode('CAN', c.canName), canBaud: toNum(c.canBaud, null) });
   return base;
 }
 function deleteChannel(idx) {
@@ -306,7 +296,6 @@ function deleteChannel(idx) {
 function channelConfigTags(c) {
   if (c.type === 'Serial') return [c.serialName ? `串口：${c.serialName}` : '', `${c.baudRate} bps`, `${c.dataBits}${PARITY_LABEL[c.parity] || c.parity}${c.stopBits}`];
   if (c.type === 'Network') return [(c.deviceIp ? c.deviceIp : '') + (c.devicePort ? ':' + c.devicePort : '')];
-  if (c.type === 'CAN') return [c.canName ? `CAN：${c.canName}` : '', `${Number(c.canBaud) / 1000} kbps`];
   return [];
 }
 function renderChannelList() {

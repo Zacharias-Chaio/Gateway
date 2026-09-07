@@ -86,6 +86,11 @@ func BitsToRegCount(endBit int) int {
 // maxRegs 限制单个读请求的最大寄存器数（Modbus 协议上限 125）；
 // 同一分组的覆盖范围超过该值时自动拆分为多个连续子请求，每个子请求的
 // Quantity <= maxRegs。maxRegs <= 0 时取默认上限 125。
+//
+// 寄存器区间横跨段边界的属性无法并入任何连续段：以自身起点单独成组，
+// 保证仍然被采集（此前会被整组静默丢弃）。单个属性宽度本身超过 maxRegs 时，
+// 独立请求会超出协议上限、被设备以异常码拒绝——这是通讯监控中可见的错误，
+// 优于静默不采集。
 func BuildGroups(props []PropMeta, maxRegs int) []RegGroup {
 	if maxRegs <= 0 {
 		maxRegs = DefaultMaxRegs
@@ -121,7 +126,9 @@ func BuildGroups(props []PropMeta, maxRegs int) []RegGroup {
 			}
 		}
 
-		// 按段拆分：每段最多覆盖 maxRegs 个寄存器
+		// 按段拆分：每段最多覆盖 maxRegs 个寄存器。
+		// captured 记录已并入某段的属性，跨界属性留给步骤 2b 的独立分组。
+		captured := make([]bool, len(members))
 		for start := 0; start < maxEnd; start += maxRegs {
 			end := start + maxRegs
 			if end > maxEnd {
@@ -130,11 +137,12 @@ func BuildGroups(props []PropMeta, maxRegs int) []RegGroup {
 			segLen := end - start
 
 			var segMembers []GroupMember
-			for _, m := range members {
+			for i, m := range members {
 				mStart := m.Offset // 属性在原始 bucket 中的寄存器偏移
 				mEnd := m.Offset + m.RegCount()
 				// 属性必须完全落在当前段内
 				if mStart >= start && mEnd <= end {
+					captured[i] = true
 					rc := m.RegCount()
 					segMembers = append(segMembers, GroupMember{
 						Prop:       m,
@@ -151,6 +159,25 @@ func BuildGroups(props []PropMeta, maxRegs int) []RegGroup {
 				StartAddr: k.base + start,
 				Quantity:  segLen,
 				Members:   segMembers,
+			})
+		}
+
+		// 2b. 跨段属性（寄存器区间横跨 maxRegs 段边界，或自身宽度超过 maxRegs）
+		// 以自身起点独立成组，从响应帧偏移 0 处切片。
+		for i, m := range members {
+			if captured[i] {
+				continue
+			}
+			rc := m.RegCount()
+			groups = append(groups, RegGroup{
+				ReadFC:    k.fc,
+				StartAddr: k.base + m.Offset,
+				Quantity:  rc,
+				Members: []GroupMember{{
+					Prop:       m,
+					ByteOffset: 0,
+					ByteLen:    rc * 2,
+				}},
 			})
 		}
 	}

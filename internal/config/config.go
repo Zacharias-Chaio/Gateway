@@ -105,11 +105,11 @@ type Record struct {
 func (Record) TableName() string { return "gateway_settings" }
 
 // DefaultHardware returns the hardware mapping used for a newly created configuration database.
+// 采集链路已收窄为串口 / 网络（Modbus RTU / TCP），不再提供 CAN 接口映射。
 func DefaultHardware() map[string]map[string]string {
 	return map[string]map[string]string{
 		"Serial":   {"COM1": "/dev/ttyS1", "COM2": "/dev/ttyS2"},
 		"Ethernet": {"ETH1": "eth0", "ETH2": "eth2"},
-		"CAN":      {"CAN1": "can0", "CAN2": "can1"},
 	}
 }
 

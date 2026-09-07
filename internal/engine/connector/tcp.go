@@ -38,6 +38,12 @@ func (d *tcpDriver) Open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// 启用 TCP keepalive：无应用层报文交互时也能感知半开连接（网线拔出 / 对端掉电），
+	// 由内核在探测失败后让阻塞的 Read 返回错误，触发 worker 重连。
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetKeepAlive(true)
+		_ = tcp.SetKeepAlivePeriod(30 * time.Second)
+	}
 	d.mu.Lock()
 	// 若并发下已有连接，先关旧的，避免泄漏。
 	if d.conn != nil {

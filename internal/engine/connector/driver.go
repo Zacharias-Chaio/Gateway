@@ -1,4 +1,4 @@
-// Package connector 封装链路连接器：通过统一 Driver 接口屏蔽串口 / 网络 / CAN 的物理差异。
+// Package connector 封装链路连接器：通过统一 Driver 接口屏蔽串口 / 网络的物理差异。
 package connector
 
 import (
@@ -8,25 +8,22 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gateway/internal/store"
 )
 
-// ErrNotSupported 表示该链路类型的驱动尚未实现（例如当前阶段的 CAN）。
+// ErrNotSupported 表示该链路类型的驱动尚未实现。
 var ErrNotSupported = errors.New("该链路类型暂不支持")
 
 // 链路类型常量，与前端 / store 中的 Channel.Type 保持一致。
 const (
 	TypeSerial  = "Serial"
 	TypeNetwork = "Network"
-	TypeCAN     = "CAN"
 )
 
-// Driver 是屏蔽 serial / tcp / can 差异的统一链路抽象。
+// Driver 是屏蔽 serial / tcp 差异的统一链路抽象。
 // 一个 Driver 实例对应一条物理链路，由所属的 worker goroutine 独占使用，
 // 因此实现本身无需保证并发安全。
 type Driver interface {
-	// Open 建立底层连接（打开串口 / 拨号 TCP / 绑定 CAN）。
+	// Open 建立底层连接（打开串口 / 拨号 TCP）。
 	// ctx 用于取消尚在进行中的连接动作。
 	Open(ctx context.Context) error
 	// Send 发送一帧字节，返回实际写入的字节数。
@@ -43,15 +40,15 @@ type Driver interface {
 
 // Info 描述链路的运行期信息。
 type Info struct {
-	Type   string `json:"type"`   // Serial / Network / CAN
-	Target string `json:"target"` // 串口节点 / IP:Port / CAN 节点
+	Type   string `json:"type"`   // Serial / Network
+	Target string `json:"target"` // 串口节点 / IP:Port
 	Open   bool   `json:"open"`   // 底层连接是否已建立
 }
 
 // Config 是从 store.Channel.Config（JSON）解析出的驱动参数，
 // 使 engine 与前端 / 存储的字段命名解耦。
 type Config struct {
-	Type string // Serial / Network / CAN
+	Type string // Serial / Network
 
 	// 通用重试 / 节流参数。
 	FrameInterval    int // 帧间隔（毫秒）
@@ -69,10 +66,6 @@ type Config struct {
 	// 网络参数。
 	DeviceIP   string
 	DevicePort int
-
-	// CAN 参数。
-	CanName string // CAN 节点，如 can0
-	CanBaud int
 }
 
 // Target 返回链路的目标地址描述，用于日志与 Info。
@@ -85,8 +78,6 @@ func (c Config) Target() string {
 			return ""
 		}
 		return c.DeviceIP + ":" + strconv.Itoa(c.DevicePort)
-	case TypeCAN:
-		return c.CanName
 	}
 	return ""
 }
@@ -98,18 +89,17 @@ func NewDriver(cfg Config) (Driver, error) {
 		return newSerialDriver(cfg)
 	case TypeNetwork:
 		return newTCPDriver(cfg)
-	case TypeCAN:
-		return newCANDriver(cfg)
 	default:
 		return nil, ErrNotSupported
 	}
 }
 
-// ParseConfig 把 store.Channel 解析成驱动可用的 Config。
-// Channel.Config 的 JSON 字段命名与前端 buildChannelConfig 保持一致。
-func ParseConfig(ch store.Channel) (Config, error) {
-	cfg := Config{Type: ch.Type}
-	if len(ch.Config) == 0 {
+// ParseConfig 把链路类型与配置 JSON 解析成驱动可用的 Config。
+// Config 的 JSON 字段命名与前端 buildChannelConfig 保持一致；
+// 入参为裸类型，connector 不依赖存储层。
+func ParseConfig(chType string, config []byte) (Config, error) {
+	cfg := Config{Type: chType}
+	if len(config) == 0 {
 		return cfg, nil
 	}
 	var raw struct {
@@ -124,10 +114,8 @@ func ParseConfig(ch store.Channel) (Config, error) {
 		StopBits         any    `json:"stopBits"`
 		DeviceIP         string `json:"deviceIp"`
 		DevicePort       *int   `json:"devicePort"`
-		CanName          string `json:"canName"`
-		CanBaud          *int   `json:"canBaud"`
 	}
-	if err := json.Unmarshal(ch.Config, &raw); err != nil {
+	if err := json.Unmarshal(config, &raw); err != nil {
 		return cfg, err
 	}
 	cfg.FrameInterval = deref(raw.FrameInterval)
@@ -141,8 +129,6 @@ func ParseConfig(ch store.Channel) (Config, error) {
 	cfg.StopBits = stopBitsString(raw.StopBits)
 	cfg.DeviceIP = raw.DeviceIP
 	cfg.DevicePort = deref(raw.DevicePort)
-	cfg.CanName = raw.CanName
-	cfg.CanBaud = deref(raw.CanBaud)
 	return cfg, nil
 }
 

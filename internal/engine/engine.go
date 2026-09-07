@@ -12,7 +12,6 @@ import (
 
 	"gateway/internal/engine/connector"
 	"gateway/internal/logx"
-	"gateway/internal/store"
 )
 
 // Engine 是链路的 supervisor：按配置差量启停 worker，支持热重载。
@@ -53,7 +52,7 @@ func (e *Engine) SetEventSink(sink EventSink) {
 //   - 两者都有但配置指纹变化 → 重启（先停后启）
 //
 // 可重复调用，用于配置保存 / 删除后的热重载。
-func (e *Engine) Apply(plans []ChannelPlan, _ []store.DeviceModel) {
+func (e *Engine) Apply(plans []ChannelPlan) {
 	e.applyMu.Lock()
 	defer e.applyMu.Unlock()
 
@@ -100,8 +99,7 @@ func (e *Engine) Apply(plans []ChannelPlan, _ []store.DeviceModel) {
 
 // startChannel 解析配置、构造驱动并启动一个 worker。调用方须持有 e.mu。
 func (e *Engine) startChannel(p ChannelPlan) {
-	ch := store.Channel{ID: p.ChannelID, Name: p.ChannelName, Type: p.ChannelType, Config: p.Config}
-	cfg, err := connector.ParseConfig(ch)
+	cfg, err := connector.ParseConfig(p.ChannelType, p.Config)
 	if err != nil {
 		e.log.Warn("链路配置解析失败，跳过", "channel", p.ChannelName, "id", p.ChannelID, "err", err)
 		return

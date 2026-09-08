@@ -61,6 +61,8 @@ func (e envelope) toMsg(subject string) *nats.Msg {
 }
 
 type messageData struct {
+	GatewayID    string             `json:"gateway_id"`
+	GatewaySN    string             `json:"gateway_sn"`
 	ChannelIndex int                `json:"channel_index"`
 	DeviceIndex  int                `json:"device_index"`
 	DeviceName   string             `json:"device_name"`
@@ -71,9 +73,12 @@ type messageData struct {
 }
 
 type propVal struct {
-	Name      string `json:"name"`
-	Value     any    `json:"value"`
-	Timestamp int64  `json:"timestamp"`
+	Name        string `json:"name"`
+	Unit        string `json:"unit"`
+	Description string `json:"description"`
+	AccessMode  string `json:"access_mode"`
+	Value       any    `json:"value"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 type messageCmd struct {

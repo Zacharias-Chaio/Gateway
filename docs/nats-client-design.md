@@ -7,7 +7,9 @@ NATS 配置保存在 SQLite 的 `gateway_settings` 中，通过 Web 的“网关
 ```yaml
 # 数据出口：NATS 发布配置
 gateway:
-  gw_id: "gw-001"               # 网关唯一 ID
+  gw_id: "gw-001"               # 网关唯一 ID，用于 NATS 主题
+  sn: "GW-20260908-001"         # 网关硬件序列号
+  location: "A 厂区 1 号配电室"   # 网关部署位置
 
 nats:
   enabled: false             # 总开关，默认关闭
@@ -169,7 +171,9 @@ func (e *Envelope) FromNatsMsg(msg *nats.Msg) (*Envelope, error) {
 ```golang
 // MessageData 一次采集刷新的遥测上报。
 type MessageData struct {
-    ChannelIndex int                `json:"channel_index"` // 通道 ID（store.Channel.ID）
+  GatewayID    string             `json:"gateway_id"`    // 网关 ID
+  GatewaySN    string             `json:"gateway_sn"`    // 网关硬件序列号
+  ChannelIndex int                `json:"channel_index"` // 通道 ID（store.Channel.ID）
     DeviceIndex  int                `json:"device_index"`  // 设备在通道挂载列表中的序号
   DeviceName   string             `json:"device_name"`   // 用户填写的设备名称
   CommNo       int                `json:"comm_no"`       // 设备通讯号（Modbus Unit ID）
@@ -180,13 +184,17 @@ type MessageData struct {
 
 // PropVal 单个属性值，对齐 engine.SessionEntry。
 type PropVal struct {
-  Name      string `json:"name"`      // 属性名称
-    Value     any   `json:"value"`     // 工程值；解析异常时为 null
-    Timestamp int64 `json:"timestamp"` // 采集时间，Unix 毫秒
+  Name        string `json:"name"`        // 属性名称
+  Unit        string `json:"unit"`        // 工程量单位
+  Description string `json:"description"` // 属性值描述
+  AccessMode  string `json:"access_mode"` // 读写属性（r / w / rw）
+  Value       any    `json:"value"`       // 工程值；解析异常时为 null
+  Timestamp   int64  `json:"timestamp"`   // 采集时间，Unix 毫秒
 }
 ```
 
 **说明**
+- `gateway_id` 和 `gateway_sn` 标识当前网关，供订阅方识别数据来源；
 - `properties` 为 map 而非数组：key 是模型属性 ID，订阅方可稳定索引；每个值同时携带属性名称；
   需区分同通道多设备时使用 `device_index`（等价于引擎 cacheKey 的 `deviceIndex/propName` 前缀）。
 - **每轮采集按设备发送一条完整消息**：设备的全部属性为一个传输单位，完成该设备一轮采集后立即上送；属性值即使未变化也不得省略。
@@ -252,7 +260,7 @@ type MessageQueryResp struct {
 type ChannelInfo struct {
     ID        int          `json:"id"`
     Name      string       `json:"name"`
-    Type      string       `json:"type"` // Serial/Network/CAN
+    Type      string       `json:"type"` // Serial/Network
     Connected bool         `json:"connected"` // 引擎在线状态
     Devices   []DeviceInfo `json:"devices"`   // 挂载设备列表
 }

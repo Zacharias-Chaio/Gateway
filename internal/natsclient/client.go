@@ -21,7 +21,7 @@ import (
 // Client publishes engine events and serves the cmd and query subjects.
 type Client struct {
 	config       config.NATS
-	gateway      string
+	gateway      config.Gateway
 	source       engine.PlanSource
 	engine       *engine.Engine
 	log          *slog.Logger
@@ -38,14 +38,14 @@ type Client struct {
 
 // New connects to NATS and starts the event publisher and request subscriptions.
 // source 提供链路与设备模型配置（拓扑查询用），北向客户端不直接依赖存储层。
-func New(ctx context.Context, gateway string, cfg config.NATS, source engine.PlanSource, eng *engine.Engine) (*Client, error) {
-	if gateway == "" || strings.Contains(gateway, ".") {
+func New(ctx context.Context, gateway config.Gateway, cfg config.NATS, source engine.PlanSource, eng *engine.Engine) (*Client, error) {
+	if gateway.GWID == "" || strings.Contains(gateway.GWID, ".") {
 		return nil, fmt.Errorf("无效 gateway.gw_id")
 	}
 	if cfg.SubjectPrefix == "" {
 		return nil, fmt.Errorf("nats.subjectPrefix 不能为空")
 	}
-	prefix := strings.TrimSuffix(cfg.SubjectPrefix, ".") + "." + gateway
+	prefix := strings.TrimSuffix(cfg.SubjectPrefix, ".") + "." + gateway.GWID
 	client := &Client{
 		config: cfg, gateway: gateway, source: source, engine: eng, log: logx.Module("nats"),
 		data: prefix + ".data", cmd: prefix + ".cmd", query: prefix + ".query",
@@ -156,9 +156,9 @@ func (c *Client) publishEvent(event any) {
 		messageType = "data"
 		properties := make(map[string]propVal, len(value.Properties))
 		for id, prop := range value.Properties {
-			properties[id] = propVal{Name: prop.Name, Value: prop.Value, Timestamp: prop.Timestamp.UnixMilli()}
+			properties[id] = propVal{Name: prop.Name, Unit: prop.Unit, Description: prop.Description, AccessMode: prop.AccessMode, Value: prop.Value, Timestamp: prop.Timestamp.UnixMilli()}
 		}
-		payload = messageData{ChannelIndex: value.ChannelID, DeviceIndex: value.DeviceIndex,
+		payload = messageData{GatewayID: c.gateway.GWID, GatewaySN: c.gateway.SN, ChannelIndex: value.ChannelID, DeviceIndex: value.DeviceIndex,
 			DeviceName: value.DeviceName, CommNo: value.CommNo, ModelID: value.ModelID,
 			ModelName: value.ModelName, Properties: properties}
 	case engine.WriteResultEvent:

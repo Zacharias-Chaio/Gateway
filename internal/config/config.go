@@ -23,6 +23,7 @@ type App struct {
 // Gateway 是网关实例的静态信息配置。
 type Gateway struct {
 	GWID     string `json:"gw_id" yaml:"gw_id"`
+	SN       string `json:"sn" yaml:"sn"` // 网关硬件序列号
 	Location string `json:"location" yaml:"location"`
 }
 
@@ -78,7 +79,7 @@ func Default() App {
 			DailyRotate: true,
 			BufferSize:  500,
 		},
-		Gateway: Gateway{GWID: "gw_000", Location: ""},
+		Gateway: Gateway{GWID: "gw_000", SN: "", Location: ""},
 		NATS: NATS{
 			Enabled: false, URL: "nats://127.0.0.1:4222", Name: "gateway",
 			QueueSize: 4096, ConnectTimeout: 2000, ReconnectWait: 2000,

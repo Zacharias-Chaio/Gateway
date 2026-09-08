@@ -226,6 +226,7 @@ Remove-Item Env:\GOOS, Env:\GOARCH, Env:\CGO_ENABLED
 | | `log.compress` / `log.dailyRotate` | `true` / `true` | 保存后立即 |
 | | `log.bufferSize`（SSE 环形缓冲） | `500` | 保存后立即 |
 | 网关 | `gateway.gw_id`（用于 NATS 主题，不能含 `.`） | `gw_000` | 重启运行时后 |
+| | `gateway.sn`（网关硬件序列号） | 空 | 重启运行时后 |
 | | `gateway.location` | 空 | 重启运行时后 |
 | NATS | `nats.enabled` | `false` | 重启运行时后 |
 | | `nats.url` | `nats://127.0.0.1:4222` | 重启运行时后 |

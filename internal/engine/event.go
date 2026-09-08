@@ -23,9 +23,12 @@ type TelemetryEvent struct {
 
 // TelemetryProperty is a single property in a telemetry snapshot, keyed by ID.
 type TelemetryProperty struct {
-	Name      string
-	Value     any
-	Timestamp time.Time
+	Name        string
+	Unit        string
+	Description string
+	AccessMode  string
+	Value       any
+	Timestamp   time.Time
 }
 
 // WriteResultEvent 表示一条写命令的最终执行结果。

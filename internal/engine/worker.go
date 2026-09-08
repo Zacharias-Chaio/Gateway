@@ -132,9 +132,9 @@ func (w *worker) publishTelemetry(deviceIndex int, online bool) {
 				continue
 			}
 			if value, ok := w.data[cacheKey(deviceIndex, prop.Name)]; ok {
-				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: value.Value, Timestamp: value.Timestamp}
+				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Unit: prop.Unit, Description: prop.Description, AccessMode: prop.AccessMode, Value: value.Value, Timestamp: value.Timestamp}
 			} else {
-				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: nil, Timestamp: now}
+				properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Unit: prop.Unit, Description: prop.Description, AccessMode: prop.AccessMode, Value: nil, Timestamp: now}
 			}
 		}
 		w.sess.RUnlock()
@@ -158,7 +158,7 @@ func (w *worker) addOnlineTelemetry(properties map[string]TelemetryProperty, dev
 			w.log.Warn("在线状态属性缺少 ID，跳过遥测发布", "channel", w.name, "device", dev.DisplayName())
 			return
 		}
-		properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Value: value, Timestamp: timestamp}
+		properties[prop.PropID] = TelemetryProperty{Name: prop.Name, Unit: prop.Unit, Description: prop.Description, AccessMode: prop.AccessMode, Value: value, Timestamp: timestamp}
 		return
 	}
 }

@@ -41,7 +41,9 @@ type PropMeta struct {
 	Coefficient  float64 `json:"coefficient"`
 	DeltaValue   float64 `json:"deltaValue"` // 偏移量（可正负），工程值 = 原始值 × coefficient + deltaValue
 	ByteOrder    string  `json:"byteOrder"`
-	AccessMode   string  `json:"accessMode"` // r / w / rw
+	AccessMode   string  `json:"accessMode"`  // r / w / rw
+	Unit         string  `json:"unit"`        // 工程量单位（遥测上报用）
+	Description  string  `json:"description"` // 属性值描述（遥测上报用）
 
 	// Legacy 别名，仅用于向后兼容旧 JSON 数据（base → deltaValue, dataLength 逆向推导）。
 	LegacyBase       float64 `json:"base,omitempty"`

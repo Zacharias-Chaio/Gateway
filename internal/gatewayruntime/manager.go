@@ -95,7 +95,7 @@ func (m *Manager) start() error {
 	eng := engine.New(runCtx)
 	var nats *natsclient.Client
 	if settings.App.NATS.Enabled {
-		nats, err = natsclient.New(runCtx, settings.App.Gateway.GWID, settings.App.NATS, m.source, eng)
+		nats, err = natsclient.New(runCtx, settings.App.Gateway, settings.App.NATS, m.source, eng)
 		if err != nil {
 			m.log.Warn("启动 NATS 客户端失败，数据扇出功能已禁用", "err", err)
 		} else {

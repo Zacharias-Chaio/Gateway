@@ -2,6 +2,7 @@
 const SETTINGS_CARDS = [
   { icon: 'router', title: '网关信息', subtitle: '标识并描述当前网关实例', fields: [
     { path: 'gateway.gw_id', label: '网关 ID', hint: '仅允许字母、数字、下划线和连字符；重启后生效。' },
+    { path: 'gateway.sn', label: '网关 SN', hint: '网关硬件序列号，用于设备追溯。' },
     { path: 'gateway.location', label: '位置信息', hint: '例如：A 厂区 1 号配电室。' }
   ] },
   { icon: 'journal-text', title: '日志设置', subtitle: '终端、文件与前端日志出口', fields: [

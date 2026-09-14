@@ -1,8 +1,8 @@
-// Package gatewayruntime manages restartable gateway runtime resources.
+// Package runtime manages restartable gateway runtime resources.
 // 它是采集运行时的组合根：组装 engine、NATS 客户端与配置来源（engine.PlanSource）。
 // 网关本身即以单一微服务形态部署、不再进一步拆分；如需接入远程配置中心，
 // 替换 PlanSource 的实现即可，引擎与 worker 代码不变。
-package gatewayruntime
+package runtime
 
 import (
 	"context"

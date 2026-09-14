@@ -32,7 +32,7 @@ IoT 数据采集网关 —— 单一 Go 二进制，内嵌 Web 配置界面与 S
 flowchart LR
     U["浏览器<br/>配置与监控"] -->|"HTTP :8080"| API["HTTP API<br/>chi · /api"]
     API --> DB[("SQLite<br/>config.db")]
-    API --> RT["运行时管理器<br/>gatewayruntime"]
+    API --> RT["运行时管理器<br/>runtime"]
     RT --> ENG["链路引擎<br/>差量热重载"]
     ENG --> WK["链路 Worker ×N<br/>每链路 1 goroutine"]
     WK --> CVT["协议转换器<br/>Modbus RTU / TCP"]
@@ -47,7 +47,7 @@ flowchart LR
 | 层 | 包 | 职责 |
 |----|----|------|
 | Web / API | `internal/web`、`internal/api` | chi 路由、REST 处理器、内嵌静态前端 |
-| 运行时 | `internal/gatewayruntime` | 采集运行时组合根：组装 engine、NATS 客户端与 PlanSource；进程内重启不退出 HTTP 服务 |
+| 运行时 | `internal/runtime` | 采集运行时组合根：组装 engine、NATS 客户端与 PlanSource；进程内重启不退出 HTTP 服务 |
 | 编排 | `internal/engine` | 链路 supervisor（差量热重载）、worker 采集循环、实时值缓存、通讯监控 |
 | 协议 | `internal/engine/converter` | Modbus 组帧 / 解帧、CRC / MBAP 校验、异常码解析、工程值映射、寄存器分组 |
 | 传输 | `internal/engine/connector` | `Driver` 接口屏蔽串口 / TCP 差异 |
@@ -159,10 +159,10 @@ Remove-Item Env:\GOOS, Env:\GOARCH, Env:\CGO_ENABLED
 
 网关以单一微服务形态交付、不再进一步拆分；内部按配置面 / 采集面收敛边界，使各模块可独立测试、实现可替换：
 
-- **`engine.PlanSource`**（`internal/engine/source.go`）：引擎读取配置的唯一入口，进程内由 `gatewayruntime.dbPlanSource` 从 SQLite 加载并转换为引擎 DTO；如需接入远程配置中心，仅需替换该实现，引擎与 worker 代码不变。
+- **`engine.PlanSource`**（`internal/engine/source.go`）：引擎读取配置的唯一入口，进程内由 `runtime.dbPlanSource` 从 SQLite 加载并转换为引擎 DTO；如需接入远程配置中心，仅需替换该实现，引擎与 worker 代码不变。
 - **`engine.EventSink`**：北向事件出口（遥测 / 写结果），当前由 NATS 客户端实现。
 - **`api.RuntimeFacade`**：配置面保存后只调用 `ConfigChanged()` 通知变更，不直接操作引擎。
-- **`gatewayruntime.Manager`**：采集运行时组合根，负责引擎与北向客户端的生命周期。
+- **`runtime.Manager`**：采集运行时组合根，负责引擎与北向客户端的生命周期。
 
 ## NATS 北向接口
 
@@ -275,7 +275,7 @@ Gateway/
 │   │       ├── mapper.go          # 字节 ↔ 工程值映射（位段 / 字节序）
 │   │       ├── value.go           # 写值 PDU 编码
 │   │       └── modbus/            # RTU / TCP 组帧解帧、CRC、异常码
-│   ├── gatewayruntime/            # 采集运行时组合根：PlanSource 实现 + engine/NATS 生命周期
+│   ├── runtime/                   # 采集运行时组合根：PlanSource 实现 + engine/NATS 生命周期
 │   ├── logx/                      # 终端 + 滚动文件 + SSE 三路日志
 │   ├── natsclient/                # Core NATS 客户端（data / cmd / query）
 │   ├── store/                     # GORM 模型与 SQLite 连接

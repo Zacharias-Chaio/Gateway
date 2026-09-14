@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"gateway/internal/config"
-	"gateway/internal/gatewayruntime"
 	"gateway/internal/logx"
+	"gateway/internal/runtime"
 	"gateway/internal/store"
 	"gateway/internal/web"
 )
@@ -41,14 +41,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	runtime, err := gatewayruntime.New(ctx, db)
+	gatewayRuntime, err := runtime.New(ctx, db)
 	if err != nil {
 		logger.Error("初始化网关运行时失败", "err", err)
 		os.Exit(1)
 	}
 	logger = logx.Module("main")
 
-	srv := &http.Server{Addr: *addr, Handler: web.Router(db, runtime)}
+	srv := &http.Server{Addr: *addr, Handler: web.Router(db, gatewayRuntime)}
 
 	go func() {
 		logger.Info("网关微服务启动", "addr", *addr, "url", "http://localhost"+*addr)
@@ -62,7 +62,7 @@ func main() {
 	stop() // 恢复默认信号处理：再次 Ctrl+C 可强制退出
 	logger.Info("正在关闭服务…")
 
-	runtime.Stop()
+	gatewayRuntime.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

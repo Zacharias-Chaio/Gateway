@@ -76,7 +76,7 @@
       "id": "runtime",
       "type": "backend",
       "label": "运行时管理器",
-      "sublabel": "gatewayruntime",
+      "sublabel": "runtime",
       "pos": [
         440,
         420

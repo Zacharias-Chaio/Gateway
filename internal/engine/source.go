@@ -23,7 +23,7 @@ type ModelSpec struct {
 }
 
 // PlanSource 提供构建采集计划所需的全部配置。
-// 实现必须并发安全；进程内 SQLite 实现见 gatewayruntime.dbPlanSource。
+// 实现必须并发安全；进程内 SQLite 实现见 runtime.dbPlanSource。
 type PlanSource interface {
 	LoadChannels(ctx context.Context) ([]ChannelSpec, error)
 	LoadModels(ctx context.Context) ([]ModelSpec, error)

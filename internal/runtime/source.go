@@ -1,4 +1,4 @@
-package gatewayruntime
+package runtime
 
 import (
 	"context"

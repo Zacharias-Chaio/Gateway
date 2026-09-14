@@ -101,7 +101,7 @@ func (s *Server) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	ok(w, map[string]int{"id": id})
 }
 
-// notifyConfigChanged 通知运行时配置已变更：由 gatewayruntime 从 PlanSource
+// notifyConfigChanged 通知运行时配置已变更：由 runtime 从 PlanSource
 // 拉取全量链路 / 模型并触发引擎差量热重载。API 层不直接操作引擎。
 func (s *Server) notifyConfigChanged() {
 	if runtime, ok := s.Engine.(RuntimeFacade); ok {

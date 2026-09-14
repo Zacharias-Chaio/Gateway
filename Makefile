@@ -1,7 +1,7 @@
 APP_NAME := gateway
 BUILD_DIR ?= bin
 GO ?= go
-VERSION ?= dev
+VERSION ?= v0.0.0
 
 GOOS ?= $(shell $(GO) env GOOS)
 GOARCH ?= $(shell $(GO) env GOARCH)

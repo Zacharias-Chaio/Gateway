@@ -38,8 +38,8 @@
 | `deviceType` | `string` | 设备类型 |
 | `deviceModel` | `string` | 设备型号 |
 | `ratedPower` | `number\|null` | 额定功率 |
-| `interfaceType` | `string` | 接口类型：`Serial` / `Network` / `CAN` |
-| `protocolType` | `string` | 协议类型（如 Modbus RTU / Modbus TCP） |
+| `interfaceType` | `string` | 接口类型：`Serial` / `Network`（CAN 已移除） |
+| `protocolType` | `string` | 协议类型：仅 `Modbus RTU` / `Modbus TCP`（保存时白名单校验） |
 | `protocolVersion` | `string` | 协议版本 |
 | `maxRegisterCount` | `int` | 单次读取最大寄存器数（默认 125，即 Modbus 上限） |
 
@@ -130,7 +130,7 @@
 |------|------|-----------|------|
 | `ID` | `int` | `primaryKey` | 通道 ID（自增） |
 | `Name` | `string` | — | 链路名称 |
-| `Type` | `string` | — | 链路类型：`Serial` / `Network` / `CAN` |
+| `Type` | `string` | — | 链路类型：`Serial` / `Network`（CAN 已移除，启动时自动清理历史 CAN 记录） |
 | `Config` | `datatypes.JSON` | — | 通信参数（见 §2.2） |
 | `Devices` | `datatypes.JSON` | — | 挂载设备列表（见 §2.3） |
 | `CreatedAt` | `time.Time` | `json:"-"` | 创建时间 |
@@ -145,7 +145,7 @@
 | `frameInterval` | `int\|null` | 帧间隔（毫秒），半双工总线发送后等待响应 |
 | `reconnectRetries` | `int\|null` | 连接失败重试次数 |
 | `resendRetries` | `int\|null` | 单帧重发次数 |
-| `pollInterval` | `int\|null` | 轮询间隔（毫秒），0 表示默认 1s |
+| `pollInterval` | `int\|null` | 轮询间隔（毫秒），0 表示默认 500ms |
 
 按链路类型的附加字段：
 
@@ -166,13 +166,6 @@
 | `deviceIp` | `string` | 设备 IP |
 | `devicePort` | `int` | 设备端口（如 502） |
 
-**CAN**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `canName` | `string` | CAN 节点（如 `can0`） |
-| `canBaud` | `int` | CAN 波特率 |
-
 ### 2.3 Devices（挂载设备列表）
 
 数组，每项描述一个挂载在链路上的从站设备：
@@ -187,7 +180,7 @@
 
 ### 2.4 接口映射
 
-`gateway_settings` 记录同时保存应用配置和硬件映射；其中 `app.gateway.gw_id` 是网关唯一 ID，`app.gateway.location` 是可选的部署位置描述。
+`gateway_settings` 记录同时保存应用配置和硬件映射；其中 `app.gateway.gw_id` 是网关唯一 ID，`app.gateway.sn` 是可选的网关硬件序列号，`app.gateway.location` 是可选的部署位置描述。
 
 硬件映射定义面板丝印标签与实际设备节点的关系。首次创建数据库时，静态默认值来自 `internal/config/config.go`：
 
@@ -195,10 +188,6 @@
 Serial:        # 串口
   COM1: /dev/ttyS1
   COM2: /dev/ttyS2
-Ethernet:      # 网口（网关自身多网卡）
-  ETH1: eth0
-CAN:           # CAN 口
-  CAN1: can0
 ```
 
 前端配置时选择丝印标签（如 `COM1`），保存时由 `buildChannelConfig` 自动替换为真实节点（如 `/dev/ttyS1`）。通过 `GET /api/hardware` 接口从数据库读取。
@@ -220,7 +209,6 @@ CAN:           # CAN 口
 
 保存链路时，按链路类型计算资源唯一键：
 - Serial → `serialName`
-- CAN → `canName`
 - Network → `deviceIp:devicePort`
 
 若与其他链路冲突，返回 `409 Conflict`。

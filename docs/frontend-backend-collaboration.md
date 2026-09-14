@@ -33,7 +33,7 @@
 | API | `internal/api` | REST 处理器、引擎回调 | `api.Server` |
 | 存储 | `internal/store` | GORM 模型与迁移 | `store.Open(...)` |
 | 引擎 | `internal/engine` | 链路 worker、采集循环、热重载 | `engine.Engine` |
-| 连接器 | `internal/engine/connector` | 串口/TCP/CAN 抽象 | `Driver` 接口 |
+| 连接器 | `internal/engine/connector` | 串口/TCP 抽象 | `Driver` 接口 |
 | 协议 | `internal/engine/converter` | 帧组装/解析 | `FrameIO` 接口 |
 | 日志 | `internal/logx` | slog fanout 三路输出 | `logx.Module(name)` |
 | 前端 | `internal/web/static` | 单页 UI | 嵌入式静态资源 |

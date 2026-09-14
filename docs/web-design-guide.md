@@ -422,7 +422,6 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft Y
 - 业务模块固定图标映射（见 `constants.js` 的 `CHANNEL_TYPE_ICON`）：
   - Serial → `bi-usb-symbol`
   - Network → `bi-ethernet`
-  - CAN → `bi-hdd-network`
 - 一级导航图标：`bi-cpu`（设备）/`bi-diagram-3`（链路）/`bi-activity`（实时）/`bi-journal-text`（报文信息）
 - 网关设置导航图标：`bi-gear`
 - 品牌图标：`bi-hdd-network-fill`

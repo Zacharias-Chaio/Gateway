@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PowerPulse Gateway 系统架构",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "collect-path",
+        "label": "采集主链路",
+        "focus": [
+          "browser",
+          "httpapi",
+          "runtime",
+          "engine",
+          "worker",
+          "connector",
+          "devices"
+        ],
+        "note": "从浏览器配置到现场设备轮询的南向主路径。"
+      },
+      {
+        "id": "protocol-layer",
+        "label": "协议与传输",
+        "focus": [
+          "worker",
+          "converter",
+          "connector",
+          "devices"
+        ],
+        "note": "Worker 持有的两把钥匙：转换器组帧解帧，连接器收发字节。"
+      },
+      {
+        "id": "north-bound",
+        "label": "北向出口",
+        "focus": [
+          "worker",
+          "natsclient",
+          "natsserver"
+        ],
+        "note": "遥测与写结果经 Core NATS 扇出，cmd/query 反向下发。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "浏览器",
+      "sublabel": "Web 配置与监控界面",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        130,
+        72
+      ]
+    },
+    {
+      "id": "httpapi",
+      "type": "backend",
+      "label": "HTTP API",
+      "sublabel": "chi 路由 · /api",
+      "pos": [
+        230,
+        420
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "运行时管理器",
+      "sublabel": "gatewayruntime",
+      "pos": [
+        440,
+        420
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "链路引擎",
+      "sublabel": "engine · 差量热重载",
+      "pos": [
+        650,
+        420
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "链路 Worker",
+      "sublabel": "每链路 1 个 goroutine",
+      "pos": [
+        860,
+        420
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "connector",
+      "type": "backend",
+      "label": "连接器",
+      "sublabel": "TCP / 串口",
+      "pos": [
+        1070,
+        420
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "devices",
+      "type": "external",
+      "label": "现场设备",
+      "sublabel": "Modbus 从站 · 1-247",
+      "pos": [
+        1300,
+        420
+      ],
+      "size": [
+        120,
+        72
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "config.db · GORM",
+      "pos": [
+        230,
+        200
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "converter",
+      "type": "backend",
+      "label": "协议转换器",
+      "sublabel": "Modbus RTU / TCP",
+      "pos": [
+        860,
+        200
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "natsclient",
+      "type": "messagebus",
+      "label": "NATS 客户端",
+      "sublabel": "北向数据出口",
+      "pos": [
+        1070,
+        200
+      ],
+      "size": [
+        150,
+        72
+      ]
+    },
+    {
+      "id": "natsserver",
+      "type": "external",
+      "label": "NATS 服务",
+      "sublabel": "Core NATS",
+      "pos": [
+        1300,
+        200
+      ],
+      "size": [
+        120,
+        72
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "PowerPulse Gateway · 单一 Go 进程",
+      "wraps": [
+        "httpapi",
+        "runtime",
+        "engine",
+        "worker",
+        "connector",
+        "converter",
+        "sqlite",
+        "natsclient"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-to-api",
+      "from": "browser",
+      "to": "httpapi",
+      "label": "HTTP :8080",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-runtime",
+      "from": "httpapi",
+      "to": "runtime",
+      "label": "保存配置 / 下发写值",
+      "labelAt": [
+        410,
+        506
+      ]
+    },
+    {
+      "id": "runtime-to-engine",
+      "from": "runtime",
+      "to": "engine",
+      "label": "Apply 采集计划",
+      "labelAt": [
+        620,
+        506
+      ]
+    },
+    {
+      "id": "engine-to-worker",
+      "from": "engine",
+      "to": "worker",
+      "label": "差量启停",
+      "labelAt": [
+        830,
+        506
+      ]
+    },
+    {
+      "id": "worker-to-connector",
+      "from": "worker",
+      "to": "connector",
+      "label": "Send / Receive",
+      "labelAt": [
+        1040,
+        506
+      ]
+    },
+    {
+      "id": "connector-to-devices",
+      "from": "connector",
+      "to": "devices",
+      "label": "RS-485 / 以太网",
+      "labelAt": [
+        1245,
+        506
+      ]
+    },
+    {
+      "id": "api-to-sqlite",
+      "from": "httpapi",
+      "to": "sqlite",
+      "label": "GORM 读写",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "worker-to-converter",
+      "from": "worker",
+      "to": "converter",
+      "label": "组帧 / 解帧",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelAt": [
+        890,
+        410
+      ]
+    },
+    {
+      "id": "worker-to-nats",
+      "from": "worker",
+      "to": "natsclient",
+      "label": "遥测 / 写结果事件",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "nats-to-server",
+      "from": "natsclient",
+      "to": "natsserver",
+      "label": "data / cmd / query",
+      "labelAt": [
+        1260,
+        286
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "采集链路",
+      "items": [
+        "每条链路独占一个 goroutine，断线后每 3 秒自动重连",
+        "属性按寄存器分组合并读请求，工程值 = 原始值 × 系数 + 偏移",
+        "帧间隔、重发次数、轮询周期均可按链路配置"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "配置与监控",
+      "items": [
+        "浏览器内完成设备模型、链路通道、实时数据与报文监控",
+        "配置保存即热重载，指纹未变化的链路保持原连接不重启",
+        "SQLite 单文件持久化，日志同时输出终端、滚动文件与 SSE"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "北向出口",
+      "items": [
+        "遥测快照与写命令结果发布到 Core NATS data 主题",
+        "订阅 cmd / query 主题，支持远程写值与拓扑查询",
+        "NATS 不可用时自动降级，南向采集与本地配置不受影响"
+      ]
+    }
+  ]
+}

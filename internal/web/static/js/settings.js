@@ -33,8 +33,7 @@ const SETTINGS_CARDS = [
 ];
 
 const HARDWARE_CATEGORY_META = {
-  Serial: { label: '串口接口', icon: 'usb-symbol' },
-  Ethernet: { label: '以太网接口', icon: 'ethernet' }
+  Serial: { label: '串口接口', icon: 'usb-symbol' }
 };
 
 function fieldID(path) { return 'setting-' + path.replaceAll('.', '-'); }
@@ -124,7 +123,7 @@ function renderSettings() {
 
 function renderHardwareCard() {
   const hardware = state.settings.hardware;
-  const categories = [...new Set([...Object.keys(HARDWARE_CATEGORY_META), ...Object.keys(hardware)])];
+  const categories = [...new Set([...Object.keys(HARDWARE_CATEGORY_META), ...Object.keys(hardware).filter(category => category !== 'Ethernet')])];
   const groups = categories.map(category => {
     const entries = hardware[category] || {};
     const meta = HARDWARE_CATEGORY_META[category] || { label: category, icon: 'diagram-3' };
@@ -148,7 +147,9 @@ function removeHardwareRow(button) {
 }
 
 function collectHardwareSettings() {
-  const hardware = Object.fromEntries(Object.keys(state.settings.hardware).map(category => [category, {}]));
+  const hardware = Object.fromEntries(Object.keys(state.settings.hardware)
+    .filter(category => category !== 'Ethernet')
+    .map(category => [category, {}]));
   document.querySelectorAll('.settings-hardware-row').forEach(row => {
     const category = row.dataset.category;
     const label = row.querySelector('.hardware-label').value.trim();

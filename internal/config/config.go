@@ -109,8 +109,7 @@ func (Record) TableName() string { return "gateway_settings" }
 // 采集链路已收窄为串口 / 网络（Modbus RTU / TCP），不再提供 CAN 接口映射。
 func DefaultHardware() map[string]map[string]string {
 	return map[string]map[string]string{
-		"Serial":   {"COM1": "/dev/ttyS1", "COM2": "/dev/ttyS2"},
-		"Ethernet": {"ETH1": "eth0", "ETH2": "eth2"},
+		"Serial": {"COM1": "/dev/ttyS1", "COM2": "/dev/ttyS2"},
 	}
 }
 
@@ -131,6 +130,12 @@ func LoadSettings(db *gorm.DB) (Settings, error) {
 	}
 	if err := json.Unmarshal(record.Hardware, &settings.Hardware); err != nil {
 		return Settings{}, fmt.Errorf("解析硬件配置: %w", err)
+	}
+	if hardware, removed := withoutEthernetMapping(settings.Hardware); removed {
+		settings.Hardware = hardware
+		if err := SaveSettings(db, settings); err != nil {
+			return Settings{}, fmt.Errorf("清理已移除的以太网映射: %w", err)
+		}
 	}
 	return settings, nil
 }
@@ -153,6 +158,7 @@ func EnsureSettings(db *gorm.DB) (Settings, error) {
 
 // SaveSettings validates and atomically persists all gateway setting categories.
 func SaveSettings(db *gorm.DB, settings Settings) error {
+	settings.Hardware, _ = withoutEthernetMapping(settings.Hardware)
 	if err := ValidateSettings(settings); err != nil {
 		return err
 	}
@@ -166,6 +172,19 @@ func SaveSettings(db *gorm.DB, settings Settings) error {
 	}
 	record := Record{ID: 1, App: appData, Hardware: hardwareData}
 	return db.Save(&record).Error
+}
+
+func withoutEthernetMapping(hardware map[string]map[string]string) (map[string]map[string]string, bool) {
+	if _, exists := hardware["Ethernet"]; !exists {
+		return hardware, false
+	}
+	sanitized := make(map[string]map[string]string, len(hardware)-1)
+	for category, entries := range hardware {
+		if category != "Ethernet" {
+			sanitized[category] = entries
+		}
+	}
+	return sanitized, true
 }
 
 // ValidateSettings keeps invalid values from being persisted through the settings UI.
